@@ -407,6 +407,7 @@
   <div class="modal">
     <h3 id="playerMenuName">Player</h3>
     <p>What would you like to do?</p>
+    <button class="btn primary" id="playerMenuToWaiting" style="display:none; width:100%; margin-bottom:10px;">Move to waiting</button>
     <div class="modal-actions">
       <button class="btn ghost" id="playerMenuCancel">Cancel</button>
       <button class="btn danger" id="playerMenuRemove">Remove from play</button>
@@ -555,6 +556,26 @@ import {
     });
     if (!team) return;
     delete state.players[playerId];
+    if (court.teamA.length===0 && court.teamB.length===0){
+      court.status='idle'; court.mode=null;
+    }
+    commit();
+  }
+
+  // Same idea, but the player just needs a break, not to leave for good —
+  // pull them off the court and drop them back in the waiting list instead
+  // of checking them out of the system.
+  function movePlayerFromCourtToWaiting(courtId, playerId){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='playing') return;
+    var team = null;
+    ['teamA','teamB'].forEach(function(teamKey){
+      var idx = court[teamKey].indexOf(playerId);
+      if (idx>-1){ court[teamKey].splice(idx,1); team = teamKey; }
+    });
+    if (!team) return;
+    state.players[playerId].waitSince = Date.now();
+    state.pool.push(playerId);
     if (court.teamA.length===0 && court.teamB.length===0){
       court.status='idle'; court.mode=null;
     }
@@ -1370,9 +1391,12 @@ import {
   var playerMenuNameEl = document.getElementById('playerMenuName');
   var pendingPlayerAction = null;
 
+  var playerMenuToWaitingBtn = document.getElementById('playerMenuToWaiting');
+
   function openPlayerMenu(playerId, context){
     pendingPlayerAction = { playerId: playerId, context: context };
     playerMenuNameEl.textContent = nm(playerId);
+    playerMenuToWaitingBtn.style.display = (context.type==='court') ? 'block' : 'none';
     playerMenuBackdrop.classList.add('show');
   }
   function closePlayerMenu(){
@@ -1380,6 +1404,12 @@ import {
     pendingPlayerAction = null;
   }
   document.getElementById('playerMenuCancel').addEventListener('click', closePlayerMenu);
+  playerMenuToWaitingBtn.addEventListener('click', function(){
+    if (!pendingPlayerAction) return;
+    var pid = pendingPlayerAction.playerId, ctx = pendingPlayerAction.context;
+    closePlayerMenu();
+    if (ctx.type==='court') movePlayerFromCourtToWaiting(ctx.courtId, pid);
+  });
   document.getElementById('playerMenuRemove').addEventListener('click', function(){
     if (!pendingPlayerAction) return;
     var pid = pendingPlayerAction.playerId, ctx = pendingPlayerAction.context;
