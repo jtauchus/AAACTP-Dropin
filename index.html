@@ -86,6 +86,7 @@
   .btn:active{ transform:translateY(1px); }
   .btn.primary{ background:var(--ball); color:var(--ink); border-color:var(--ball); font-weight:700; }
   .btn.ghost{ background:transparent; color:var(--chalk-dim); font-size:12px; padding:8px 10px; }
+  .btn.danger{ background:var(--danger); color:var(--ink); border-color:var(--danger); font-weight:700; }
   .qr-tile{
     display:flex; align-items:center; gap:8px;
     border:1px solid var(--line); background:var(--panel-3);
@@ -157,6 +158,9 @@
   }
   .team-names{ font-size:12.5px; line-height:1.3; }
   .team-names .amp{ color:var(--chalk-dim); }
+  .court-player{ cursor:pointer; }
+  .court-player .x{ color:var(--chalk-dim); font-size:10px; margin-left:2px; }
+  .court-player:active{ opacity:0.6; }
   .score-btn{
     font-size:11px; font-weight:600; background:var(--panel-3); color:var(--chalk);
     border:1px solid var(--line); padding:6px 9px; border-radius:6px; flex-shrink:0;
@@ -219,9 +223,12 @@
   .chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
     color:var(--chalk); padding:4px 9px; border-radius:20px; display:flex; align-items:center; gap:5px;
+    touch-action:none;
   }
   .chip .x{ color:var(--chalk-dim); font-size:11px; }
   .chip:active{ background:var(--panel-3); }
+  .chip.drag-source{ opacity:0.35; }
+  .chip.drop-hover{ outline:2px solid var(--ball); outline-offset:1px; }
   .proposal-actions{ display:flex; gap:8px; }
   .accept-btn{
     flex:1; background:var(--ball); color:var(--ink); border:none; font-weight:700;
@@ -229,17 +236,20 @@
   }
   .accept-btn:active{ transform:translateY(1px); }
 
-  .free-agents{ margin-top:4px; }
+  .free-agents{ margin-top:4px; border-radius:10px; }
+  .free-agents.drop-hover{ outline:2px dashed var(--ball); outline-offset:6px; }
   .free-list{ display:flex; flex-wrap:wrap; gap:6px; }
   .free-chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
     color:var(--chalk-dim); padding:5px 9px; border-radius:20px; display:flex; align-items:center; gap:6px;
+    touch-action:none;
   }
   .free-chip .wait{ color:var(--chalk-dim); font-size:10px; }
   .free-chip .played{ color:var(--ball-dim); font-size:10px; }
   .free-chip .rm{ color:var(--danger); font-size:12px; }
   .free-chip.selected{ background:var(--ball-dim); border-color:var(--ball); color:var(--ink); }
   .free-chip.selected .wait, .free-chip.selected .played{ color:var(--ink); opacity:0.75; }
+  .free-chip.drag-source{ opacity:0.35; }
   .singles-hint{ font-size:11px; color:var(--chalk-dim); margin-top:8px; line-height:1.4; }
   .singles-btn{ margin-top:8px; width:100%; text-align:center; }
   .singles-btn:disabled{ opacity:0.5; }
@@ -265,6 +275,14 @@
 
   ::-webkit-scrollbar{ width:6px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+
+  /* ---------- Drag & drop ghost ---------- */
+  .drag-ghost{
+    position:fixed; z-index:1000; pointer-events:none;
+    background:var(--ball); color:var(--ink); font-weight:700; font-size:12px;
+    padding:6px 12px; border-radius:20px; box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    transform:translate(-50%,-130%); white-space:nowrap;
+  }
 </style>
 </head>
 <body>
@@ -317,6 +335,17 @@
     <div class="modal-actions">
       <button class="btn ghost" id="cancelAdd">Cancel</button>
       <button class="btn primary" id="confirmAdd">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="playerMenuBackdrop">
+  <div class="modal">
+    <h3 id="playerMenuName">Player</h3>
+    <p>What would you like to do?</p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="playerMenuCancel">Cancel</button>
+      <button class="btn danger" id="playerMenuRemove">Remove from play</button>
     </div>
   </div>
 </div>
@@ -428,6 +457,38 @@
     });
     state.players[playerId].waitSince = Date.now();
     state.pool.push(playerId);
+    recompute();
+    renderAll();
+  }
+
+  // A player on an active court needs to leave right now — check them out entirely
+  // and, if anyone is waiting, pull in a substitute so the match can keep going.
+  function removePlayerFromCourt(courtId, playerId){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='playing') return;
+    var team = null;
+    ['teamA','teamB'].forEach(function(teamKey){
+      var idx = court[teamKey].indexOf(playerId);
+      if (idx>-1){ court[teamKey].splice(idx,1); team = teamKey; }
+    });
+    if (!team) return;
+    delete state.players[playerId];
+
+    var free = state.pool.slice()
+      .filter(function(pid){ return state.selectedForSingles.indexOf(pid)===-1; })
+      .sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; });
+
+    if (free.length > 0){
+      var incoming = free[0];
+      state.pool.splice(state.pool.indexOf(incoming), 1);
+      court[team].push(incoming);
+    } else if (court.teamA.length===0 || court.teamB.length===0){
+      court.teamA.concat(court.teamB).forEach(function(pid){
+        state.players[pid].waitSince = Date.now();
+        state.pool.push(pid);
+      });
+      court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
+    }
     recompute();
     renderAll();
   }
@@ -595,6 +656,62 @@
     renderAll();
   }
 
+  // Dragged a proposed player back out to the waiting list: pull the next
+  // longest-waiting free player into their spot, or dissolve the group if
+  // nobody else is around to fill it.
+  function moveProposalMemberToPool(proposalId, playerId){
+    var pr = state.proposals.find(function(p){ return p.id===proposalId; });
+    if (!pr) return;
+    var mi = pr.members.indexOf(playerId);
+    if (mi===-1) return;
+    ['teamA','teamB'].forEach(function(teamKey){
+      var idx = pr[teamKey].indexOf(playerId);
+      if (idx>-1) pr[teamKey].splice(idx,1);
+    });
+    pr.members.splice(mi,1);
+    state.players[playerId].waitSince = Date.now();
+    state.pool.push(playerId);
+
+    var candidates = state.pool.slice()
+      .filter(function(pid){ return pid!==playerId && state.selectedForSingles.indexOf(pid)===-1; })
+      .sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; });
+
+    if (candidates.length > 0){
+      var incoming = candidates[0];
+      state.pool.splice(state.pool.indexOf(incoming), 1);
+      var teamKey = pr.teamA.length<2 ? 'teamA' : 'teamB';
+      pr[teamKey].push(incoming);
+      pr.members.push(incoming);
+    } else {
+      dissolveProposal(proposalId);
+    }
+    recompute();
+    renderAll();
+  }
+
+  // Dragged a waiting player onto a specific proposed player: swap them in,
+  // the bumped player goes back to the waiting list.
+  function swapProposalMember(proposalId, targetPlayerId, incomingPlayerId){
+    var pr = state.proposals.find(function(p){ return p.id===proposalId; });
+    if (!pr) return;
+    if (targetPlayerId===incomingPlayerId) return;
+    if (pr.members.indexOf(targetPlayerId)===-1) return;
+    if (state.pool.indexOf(incomingPlayerId)===-1) return;
+
+    ['teamA','teamB'].forEach(function(teamKey){
+      var idx = pr[teamKey].indexOf(targetPlayerId);
+      if (idx>-1) pr[teamKey][idx] = incomingPlayerId;
+    });
+    pr.members[pr.members.indexOf(targetPlayerId)] = incomingPlayerId;
+
+    state.pool.splice(state.pool.indexOf(incomingPlayerId), 1);
+    state.players[targetPlayerId].waitSince = Date.now();
+    state.pool.push(targetPlayerId);
+
+    recompute();
+    renderAll();
+  }
+
   function finishMatch(courtId, winner){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -631,12 +748,93 @@
     picks.forEach(function(c){ finishMatch(c.id, 'A'); });
   }
 
+  // ---------- Drag & drop: swap-pool proposals <-> waiting list ----------
+  var drag = null;              // {source, startX, startY, moved, ghost, srcEl}
+  var suppressClickUntil = 0;   // swallow the click a drag-release leaves behind
+
+  function startDrag(e, source){
+    if (e.pointerType==='mouse' && e.button!==0) return;
+    if (drag) return;
+    drag = { source: source, startX: e.clientX, startY: e.clientY, moved: false, ghost: null, srcEl: null };
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', onDragEnd);
+    document.addEventListener('pointercancel', onDragEnd);
+  }
+
+  function findDropTarget(x,y){
+    var el = document.elementFromPoint(x,y);
+    if (!el) return null;
+    var chip = el.closest('.chip[data-pr]');
+    if (chip) return { kind:'proposal-chip', proposalId: chip.getAttribute('data-pr'), playerId: chip.getAttribute('data-player') };
+    if (el.closest('.free-agents')) return { kind:'pool' };
+    return null;
+  }
+
+  function onDragMove(e){
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX-drag.startX, e.clientY-drag.startY) > 6){
+      drag.moved = true;
+      var g = document.createElement('div');
+      g.className = 'drag-ghost';
+      g.textContent = nm(drag.source.playerId);
+      document.body.appendChild(g);
+      drag.ghost = g;
+      var selector = drag.source.type==='pool'
+        ? '.free-chip[data-select="'+drag.source.playerId+'"]'
+        : '.chip[data-pr="'+drag.source.proposalId+'"][data-player="'+drag.source.playerId+'"]';
+      drag.srcEl = document.querySelector(selector);
+      if (drag.srcEl) drag.srcEl.classList.add('drag-source');
+    }
+    if (!drag.moved) return;
+    e.preventDefault();
+    drag.ghost.style.left = e.clientX+'px';
+    drag.ghost.style.top = e.clientY+'px';
+
+    document.querySelectorAll('.drop-hover').forEach(function(el){ el.classList.remove('drop-hover'); });
+    var target = findDropTarget(e.clientX, e.clientY);
+    if (target && target.kind==='proposal-chip' && drag.source.type==='pool'){
+      var chipEl = document.querySelector('.chip[data-pr="'+target.proposalId+'"][data-player="'+target.playerId+'"]');
+      if (chipEl) chipEl.classList.add('drop-hover');
+    } else if (target && target.kind==='pool' && drag.source.type==='proposal'){
+      var zone = document.querySelector('.free-agents');
+      if (zone) zone.classList.add('drop-hover');
+    }
+  }
+
+  function onDragEnd(e){
+    if (!drag) return;
+    document.removeEventListener('pointermove', onDragMove);
+    document.removeEventListener('pointerup', onDragEnd);
+    document.removeEventListener('pointercancel', onDragEnd);
+    document.querySelectorAll('.drop-hover').forEach(function(el){ el.classList.remove('drop-hover'); });
+    if (drag.ghost) drag.ghost.remove();
+    if (drag.srcEl) drag.srcEl.classList.remove('drag-source');
+
+    var wasDrag = drag.moved;
+    var source = drag.source;
+    var target = wasDrag ? findDropTarget(e.clientX, e.clientY) : null;
+    drag = null;
+    if (!wasDrag) return;
+    suppressClickUntil = Date.now() + 300;
+    if (!target) return;
+
+    if (source.type==='pool' && target.kind==='proposal-chip'){
+      swapProposalMember(target.proposalId, target.playerId, source.playerId);
+    } else if (source.type==='proposal' && target.kind==='pool'){
+      moveProposalMemberToPool(source.proposalId, source.playerId);
+    }
+  }
+
   // ---------- Render ----------
   function fmtWait(ms){
     var mins = Math.max(0, Math.floor(ms/60000));
     return mins<1 ? "just now" : mins+"m wait";
   }
   function nm(pid){ return state.players[pid] ? state.players[pid].name : "—"; }
+  function courtPlayerSpan(pid, courtId){
+    if (!pid) return '<b>—</b>';
+    return '<b class="court-player" data-court-player="'+pid+'" data-court="'+courtId+'">' + nm(pid) + ' <span class="x">✕</span></b>';
+  }
 
   function renderHeader(){
     document.getElementById('headcountNum').textContent = totalActivePlayers();
@@ -665,14 +863,14 @@
 
       if (court.status==='playing'){
         if (effMode==='singles'){
-          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamA[0]) + '</b></div>' +
+          body += '<div class="team-row"><div class="team-names">' + courtPlayerSpan(court.teamA[0], court.id) + '</div>' +
             '<button class="score-btn" data-court="'+court.id+'" data-winner="A">Won</button></div>';
-          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamB[0]) + '</b></div>' +
+          body += '<div class="team-row"><div class="team-names">' + courtPlayerSpan(court.teamB[0], court.id) + '</div>' +
             '<button class="score-btn" data-court="'+court.id+'" data-winner="B">Won</button></div>';
         } else {
-          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamA[0]) + '</b> <span class="amp">&amp;</span> <b>' + nm(court.teamA[1]) + '</b></div>' +
+          body += '<div class="team-row"><div class="team-names">' + courtPlayerSpan(court.teamA[0], court.id) + ' <span class="amp">&amp;</span> ' + courtPlayerSpan(court.teamA[1], court.id) + '</div>' +
             '<button class="score-btn" data-court="'+court.id+'" data-winner="A">Won</button></div>';
-          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamB[0]) + '</b> <span class="amp">&amp;</span> <b>' + nm(court.teamB[1]) + '</b></div>' +
+          body += '<div class="team-row"><div class="team-names">' + courtPlayerSpan(court.teamB[0], court.id) + ' <span class="amp">&amp;</span> ' + courtPlayerSpan(court.teamB[1], court.id) + '</div>' +
             '<button class="score-btn" data-court="'+court.id+'" data-winner="B">Won</button></div>';
         }
         if (effMode==='server-out'){
@@ -748,6 +946,12 @@
         rotateOutPlayer(parseInt(btn.getAttribute('data-out-court'),10), btn.getAttribute('data-out-player'));
       });
     });
+    grid.querySelectorAll('.court-player').forEach(function(el){
+      el.addEventListener('click', function(){
+        var courtId = parseInt(el.getAttribute('data-court'),10);
+        openPlayerMenu(el.getAttribute('data-court-player'), { type:'court', courtId: courtId });
+      });
+    });
   }
 
   function renderProposals(){
@@ -784,12 +988,14 @@
     });
 
     list.querySelectorAll('.chip').forEach(function(chip){
+      chip.addEventListener('pointerdown', function(e){
+        startDrag(e, { type:'proposal', proposalId: chip.getAttribute('data-pr'), playerId: chip.getAttribute('data-player') });
+      });
       chip.addEventListener('click', function(){
+        if (Date.now() < suppressClickUntil) return;
         var prId = chip.getAttribute('data-pr');
         var playerId = chip.getAttribute('data-player');
-        var card = chip.closest('.proposal');
-        card.classList.add('leaving');
-        setTimeout(function(){ removeFromProposal(prId, playerId); }, 160);
+        openPlayerMenu(playerId, { type:'proposal', proposalId: prId });
       });
     });
     list.querySelectorAll('.accept-btn').forEach(function(btn){
@@ -831,15 +1037,20 @@
         listEl.appendChild(el);
       });
     listEl.querySelectorAll('.free-chip').forEach(function(chipEl){
+      chipEl.addEventListener('pointerdown', function(e){
+        if (e.target.classList.contains('rm')) return;
+        startDrag(e, { type:'pool', playerId: chipEl.getAttribute('data-select') });
+      });
       chipEl.addEventListener('click', function(e){
         if (e.target.classList.contains('rm')) return; // handled separately, below
+        if (Date.now() < suppressClickUntil) return;
         toggleSinglesSelect(chipEl.getAttribute('data-select'));
       });
     });
     listEl.querySelectorAll('[data-remove]').forEach(function(x){
       x.addEventListener('click', function(e){
         e.stopPropagation();
-        removeFreeAgent(x.getAttribute('data-remove'));
+        openPlayerMenu(x.getAttribute('data-remove'), { type:'pool' });
       });
     });
 
@@ -895,6 +1106,30 @@
   });
   document.getElementById('demoBtn').addEventListener('click', simulateBusyStretch);
   document.getElementById('startSinglesBtn').addEventListener('click', startSingles);
+
+  // ---------- Player options popup ----------
+  var playerMenuBackdrop = document.getElementById('playerMenuBackdrop');
+  var playerMenuNameEl = document.getElementById('playerMenuName');
+  var pendingPlayerAction = null;
+
+  function openPlayerMenu(playerId, context){
+    pendingPlayerAction = { playerId: playerId, context: context };
+    playerMenuNameEl.textContent = nm(playerId);
+    playerMenuBackdrop.classList.add('show');
+  }
+  function closePlayerMenu(){
+    playerMenuBackdrop.classList.remove('show');
+    pendingPlayerAction = null;
+  }
+  document.getElementById('playerMenuCancel').addEventListener('click', closePlayerMenu);
+  document.getElementById('playerMenuRemove').addEventListener('click', function(){
+    if (!pendingPlayerAction) return;
+    var pid = pendingPlayerAction.playerId, ctx = pendingPlayerAction.context;
+    closePlayerMenu();
+    if (ctx.type==='pool') removeFreeAgent(pid);
+    else if (ctx.type==='proposal') removeFromProposal(ctx.proposalId, pid);
+    else if (ctx.type==='court') removePlayerFromCourt(ctx.courtId, pid);
+  });
 
   // ---------- Init ----------
   seed();
