@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Friday Drop-In Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#122019;
+    --panel:#1b2b21;
+    --panel-2:#223327;
+    --panel-3:#28392d;
+    --line:#3c5041;
+    --chalk:#edeae2;
+    --chalk-dim:#a7b6a8;
+    --ball:#d7e14a;
+    --ball-dim:#9aa23a;
+    --court-blue:#5b9bd0;
+    --alert:#e8b33d;
+    --danger:#c1755a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--ink);
+    color:var(--chalk);
+    font-family:'Inter',ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior:none;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  .num, h1, h2, h3, .court-id, .score-btn, .accept-btn{
+    font-family:'Oswald',ui-sans-serif,system-ui,sans-serif;
+  }
+  button{font-family:inherit; cursor:pointer;}
+  button:focus-visible, input:focus-visible, .chip:focus-visible{
+    outline:2px solid var(--ball); outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important; animation:none !important;}
+  }
+
+  #app{ height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap; row-gap:8px;
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    flex-shrink:0;
+  }
+  .title-block{ flex-shrink:0; order:1; }
+  .title-block h1{
+    margin:0; font-size:22px; font-weight:600; letter-spacing:0.3px; color:var(--chalk);
+  }
+  .title-block .sub{ font-size:12px; color:var(--chalk-dim); margin-top:2px; }
+  .banner{
+    order:3; flex:1 1 100%; min-width:0;
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; color:var(--ink);
+    background:var(--alert);
+    padding:8px 14px; border-radius:8px;
+    font-weight:600;
+    opacity:0; max-height:0; overflow:hidden;
+    transition:opacity .25s ease, max-height .25s ease, padding .25s ease;
+  }
+  .banner.show{ opacity:1; max-height:44px; }
+  .banner .dot{ width:7px; height:7px; border-radius:50%; background:var(--ink); flex-shrink:0; }
+  .head-actions{ display:flex; gap:10px; align-items:center; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; order:2; margin-left:auto; }
+  .headcount{
+    font-size:12px; color:var(--chalk-dim); background:var(--panel-3);
+    padding:6px 10px; border-radius:8px; border:1px solid var(--line);
+    white-space:nowrap;
+  }
+  .headcount b{ color:var(--ball); font-weight:600; }
+  .btn{
+    border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
+    padding:9px 14px; border-radius:8px; font-size:13px; font-weight:500;
+    white-space:nowrap;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn.primary{ background:var(--ball); color:var(--ink); border-color:var(--ball); font-weight:700; }
+  .btn.ghost{ background:transparent; color:var(--chalk-dim); font-size:12px; padding:8px 10px; }
+  .qr-tile{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid var(--line); background:var(--panel-3);
+    padding:6px 10px 6px 6px; border-radius:8px;
+  }
+  .qr-grid{
+    width:34px; height:34px; border-radius:4px; overflow:hidden;
+    display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(6,1fr);
+    background:var(--chalk); flex-shrink:0;
+  }
+  .qr-grid div{ background:transparent; }
+  .qr-grid div.on{ background:var(--ink); }
+  .qr-label{ font-size:11px; line-height:1.25; color:var(--chalk-dim); }
+  .qr-label b{ display:block; color:var(--chalk); font-size:12px; }
+
+  /* ---------- Main layout ---------- */
+  main{
+    flex:1; min-height:0;
+    display:grid; grid-template-columns:1fr 340px;
+    gap:16px; padding:16px 20px 20px;
+    overflow:hidden;
+  }
+  @media (max-width: 880px){
+    main{ grid-template-columns:1fr; overflow:auto; }
+    .pool-wrap{ min-height:auto; overflow:visible; }
+    .pool-scroll{ flex:none; overflow-y:visible; }
+  }
+
+  section h2{
+    margin:0 0 10px 2px; font-size:14px; font-weight:600; color:var(--chalk);
+    display:flex; align-items:center; gap:8px;
+  }
+  section h2 .count-pill{
+    font-family:'Inter'; font-size:11px; font-weight:600; color:var(--ink);
+    background:var(--court-blue); padding:2px 8px; border-radius:20px;
+  }
+
+  /* ---------- Courts grid ---------- */
+  .courts-wrap{ display:flex; flex-direction:column; min-height:0; }
+  .courts-grid{
+    display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr);
+    gap:12px; flex:1; min-height:0;
+  }
+  @media (max-width: 880px){
+    .courts-grid{ grid-template-columns:repeat(2,1fr); grid-template-rows:none; }
+  }
+  .court{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 12px; display:flex; flex-direction:column; gap:6px; min-height:0;
+    position:relative; overflow:hidden;
+  }
+  .court.idle{ background:repeating-linear-gradient(135deg, var(--panel), var(--panel) 10px, var(--panel-2) 10px, var(--panel-2) 20px); }
+  .court.reserved{ border-color:var(--ball-dim); }
+  .court.closed{ background:var(--ink); opacity:0.6; }
+  .court-top{ display:flex; align-items:center; justify-content:space-between; }
+  .court-id{ font-size:20px; font-weight:600; color:var(--chalk); }
+  .mode-badge{
+    font-size:10px; font-weight:600; color:var(--ink); background:var(--court-blue);
+    padding:2px 7px; border-radius:20px; letter-spacing:0.2px;
+  }
+  .mode-badge.server-out{ background:var(--alert); }
+  .mode-badge.singles{ background:var(--ball-dim); color:var(--ink); }
+  .mode-badge.idle{ background:var(--panel-3); color:var(--chalk-dim); }
+  .mode-badge.reserved{ background:var(--ball-dim); color:var(--ink); }
+  .mode-badge.closed{ background:var(--panel-3); color:var(--chalk-dim); }
+  .team-row{
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    background:var(--panel-2); border-radius:7px; padding:6px 8px;
+  }
+  .team-names{ font-size:12.5px; line-height:1.3; }
+  .team-names .amp{ color:var(--chalk-dim); }
+  .score-btn{
+    font-size:11px; font-weight:600; background:var(--panel-3); color:var(--chalk);
+    border:1px solid var(--line); padding:6px 9px; border-radius:6px; flex-shrink:0;
+  }
+  .score-btn:active{ transform:translateY(1px); }
+  .score-btn:disabled{ opacity:0.4; }
+  .out-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:5px; margin-top:2px; }
+  .out-btn{
+    font-size:10.5px; font-weight:600; background:var(--panel-3); color:var(--ball);
+    border:1px solid var(--ball-dim); padding:5px 6px; border-radius:6px; text-align:center;
+  }
+  .out-btn:active{ background:var(--ball); color:var(--ink); }
+  .move-btn{
+    margin-top:2px; font-size:11px; font-weight:500; background:transparent; color:var(--chalk-dim);
+    border:1px dashed var(--line); padding:6px 8px; border-radius:6px;
+  }
+  .move-btn.active{ background:var(--ball); color:var(--ink); border-style:solid; border-color:var(--ball); font-weight:700; }
+  .move-target-btn{
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background:var(--ball); color:var(--ink); border:none; font-weight:700;
+    font-size:12.5px; border-radius:7px;
+  }
+  .close-btn, .reopen-btn{
+    font-size:10.5px; background:transparent; color:var(--chalk-dim);
+    border:1px dashed var(--line); padding:5px 8px; border-radius:6px;
+  }
+  .reopen-btn{ color:var(--ball); border-color:var(--ball-dim); }
+  .idle-msg, .reserved-msg{
+    flex:1; display:flex; align-items:center; justify-content:center;
+    font-size:12px; color:var(--chalk-dim); text-align:center;
+  }
+  .pending-flash{
+    position:absolute; inset:0; background:var(--panel); display:flex;
+    align-items:center; justify-content:center; font-size:12px; color:var(--ball);
+    font-weight:600; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .pending-flash.show{ opacity:1; }
+
+  /* ---------- Swap pool sidebar ---------- */
+  .pool-wrap{ display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .pool-scroll{ flex:1; overflow-y:auto; padding-right:2px; }
+  .proposal{
+    background:var(--panel); border:1px solid var(--ball-dim); border-radius:var(--radius);
+    padding:10px; margin-bottom:10px; animation:slideIn .2s ease;
+  }
+  @keyframes slideIn{ from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:translateY(0);} }
+  .proposal.leaving{ animation:slideOut .18s ease forwards; }
+  @keyframes slideOut{ to{opacity:0; transform:scale(0.97);} }
+  .proposal-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .target-chip{
+    font-size:11px; font-weight:600; color:var(--ink); background:var(--ball);
+    padding:3px 9px; border-radius:20px;
+  }
+  .timer-track{ height:3px; background:var(--panel-3); border-radius:3px; overflow:hidden; margin-bottom:8px; }
+  .timer-fill{ height:100%; background:var(--ball-dim); width:100%; transition:width 1s linear; }
+  .teams-preview{ display:flex; flex-direction:column; gap:5px; margin-bottom:9px; }
+  .team-line{ font-size:12.5px; color:var(--chalk-dim); }
+  .team-line b{ color:var(--chalk); font-weight:500; }
+  .chips-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
+  .chip{
+    font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--chalk); padding:4px 9px; border-radius:20px; display:flex; align-items:center; gap:5px;
+  }
+  .chip .x{ color:var(--chalk-dim); font-size:11px; }
+  .chip:active{ background:var(--panel-3); }
+  .proposal-actions{ display:flex; gap:8px; }
+  .accept-btn{
+    flex:1; background:var(--ball); color:var(--ink); border:none; font-weight:700;
+    font-size:13px; padding:9px; border-radius:7px; letter-spacing:0.2px;
+  }
+  .accept-btn:active{ transform:translateY(1px); }
+
+  .free-agents{ margin-top:4px; }
+  .free-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .free-chip{
+    font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--chalk-dim); padding:5px 9px; border-radius:20px; display:flex; align-items:center; gap:6px;
+  }
+  .free-chip .wait{ color:var(--chalk-dim); font-size:10px; }
+  .free-chip .played{ color:var(--ball-dim); font-size:10px; }
+  .free-chip .rm{ color:var(--danger); font-size:12px; }
+  .free-chip.selected{ background:var(--ball-dim); border-color:var(--ball); color:var(--ink); }
+  .free-chip.selected .wait, .free-chip.selected .played{ color:var(--ink); opacity:0.75; }
+  .singles-hint{ font-size:11px; color:var(--chalk-dim); margin-top:8px; line-height:1.4; }
+  .singles-btn{ margin-top:8px; width:100%; text-align:center; }
+  .singles-btn:disabled{ opacity:0.5; }
+  .empty-note{ font-size:12px; color:var(--chalk-dim); padding:10px 2px; line-height:1.5; }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(10,15,12,0.6);
+    display:none; align-items:center; justify-content:center; z-index:50;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+    padding:20px; width:min(320px, 90vw);
+  }
+  .modal h3{ margin:0 0 4px; font-size:16px; }
+  .modal p{ margin:0 0 14px; font-size:12.5px; color:var(--chalk-dim); }
+  .modal input{
+    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel); color:var(--chalk); font-size:14px; margin-bottom:12px;
+  }
+  .modal-actions{ display:flex; gap:8px; justify-content:flex-end; }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="title-block">
+      <h1>Friday Drop-In</h1>
+      <div class="sub">Pioneer HS · 8 courts</div>
+    </div>
+    <div id="banner" class="banner"><span class="dot"></span><span id="bannerText"></span></div>
+    <div class="head-actions">
+      <div class="headcount"><b id="headcountNum">0</b> checked in</div>
+      <div class="qr-tile" id="qrTile">
+        <div class="qr-grid" id="qrGrid"></div>
+        <div class="qr-label"><b>Self check-in</b>scan or tap</div>
+      </div>
+      <button class="btn primary" id="addPlayerBtn">+ Add player</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="courts-wrap">
+      <h2>Courts</h2>
+      <div class="courts-grid" id="courtsGrid"></div>
+    </div>
+
+    <div class="pool-wrap">
+      <h2>Swap pool <span class="count-pill" id="proposalCount">0</span></h2>
+      <div class="pool-scroll">
+        <div id="proposalsList"></div>
+        <div class="free-agents">
+          <h2 style="margin-top:14px;">Waiting to play <span class="count-pill" id="freeCount">0</span></h2>
+          <div class="free-list" id="freeList"></div>
+          <div class="empty-note" id="freeEmptyNote"></div>
+          <div class="singles-hint" id="singlesHint">Tap two names above to set up a singles match on a spare court.</div>
+          <button class="btn primary singles-btn" id="startSinglesBtn" style="display:none;">Start singles match</button>
+        </div>
+      </div>
+      <button class="btn ghost" id="demoBtn" style="margin-top:10px;">Simulate 3 courts finishing</button>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3>Add a player</h3>
+    <p>For anyone without a phone — type their name and they'll join the waiting list.</p>
+    <input type="text" id="nameInput" placeholder="Player name" maxlength="24" />
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancelAdd">Cancel</button>
+      <button class="btn primary" id="confirmAdd">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- State ----------
+  var COURT_COUNT = 8;
+  var PROPOSAL_TTL = 75000; // ms
+
+  var state = {
+    players: {},      // id -> {id,name,waitSince,gamesPlayed}
+    courts: [],        // {id, status:'idle'|'reserved'|'playing', mode, teamA, teamB}
+    pool: [],           // free agent player ids
+    proposals: [],      // {id, courtId, members:[ids], teamA:[..], teamB:[..], expiresAt}
+    history: { partner:{}, opponent:{} },
+    nextId: 1,
+    moveSourceCourtId: null,   // court currently picking a destination to move to
+    selectedForSingles: []     // up to 2 free-agent ids picked to start a singles match
+  };
+
+  var FIRST_NAMES = ["Alex","Priya","Sam","Jordan","Maya","Diego","Chris","Lena","Omar","Taylor",
+    "Nina","Kevin","Grace","Theo","Ruth","Marco","Ivy","Paul","Dana","Felix",
+    "Sarah","Mike","Jen","Dave","Rosa","Ben","Wendy","Carl"];
+  var nameCursor = 0;
+  function nextSeedName(){ return FIRST_NAMES[nameCursor++ % FIRST_NAMES.length]; }
+
+  function uid(prefix){ return prefix + (state.nextId++); }
+
+  function makePlayer(name, waitOffsetMs){
+    var id = uid("p");
+    state.players[id] = {
+      id: id, name: name,
+      waitSince: Date.now() - (waitOffsetMs||0),
+      gamesPlayed: 0
+    };
+    return id;
+  }
+
+  // ---------- Seed ----------
+  function seed(){
+    for (var i=1;i<=COURT_COUNT;i++){
+      state.courts.push({ id:i, status:'idle', mode:null, teamA:[], teamB:[] });
+    }
+    // 5 active doubles courts
+    for (var c=0;c<5;c++){
+      var court = state.courts[c];
+      var a1=makePlayer(nextSeedName(), rnd(0,600000));
+      var a2=makePlayer(nextSeedName(), rnd(0,600000));
+      var b1=makePlayer(nextSeedName(), rnd(0,600000));
+      var b2=makePlayer(nextSeedName(), rnd(0,600000));
+      court.status='playing'; court.mode='doubles';
+      court.teamA=[a1,a2]; court.teamB=[b1,b2];
+    }
+    // 2 free agents already waiting
+    state.pool.push(makePlayer(nextSeedName(), 240000));
+    state.pool.push(makePlayer(nextSeedName(), 90000));
+  }
+
+  function rnd(min,max){ return Math.floor(Math.random()*(max-min))+min; }
+
+  // ---------- History / pairing ----------
+  function histKey(a,b){ return [a,b].sort().join('|'); }
+  function histCount(type,a,b){ return state.history[type][histKey(a,b)] || 0; }
+  function histBump(type,a,b){
+    var k = histKey(a,b);
+    state.history[type][k] = (state.history[type][k]||0)+1;
+  }
+  function bumpHistoryForMatch(teamA, teamB){
+    histBump('partner', teamA[0], teamA[1]);
+    histBump('partner', teamB[0], teamB[1]);
+    for (var i=0;i<2;i++){ for (var j=0;j<2;j++){ histBump('opponent', teamA[i], teamB[j]); } }
+  }
+  function pickBestPartition(members){
+    var p = members;
+    var partitions = [
+      { teamA:[p[0],p[1]], teamB:[p[2],p[3]] },
+      { teamA:[p[0],p[2]], teamB:[p[1],p[3]] },
+      { teamA:[p[0],p[3]], teamB:[p[1],p[2]] }
+    ];
+    partitions.forEach(function(part){
+      var partnerScore = histCount('partner',part.teamA[0],part.teamA[1]) + histCount('partner',part.teamB[0],part.teamB[1]);
+      var oppScore = 0;
+      part.teamA.forEach(function(a){ part.teamB.forEach(function(b){ oppScore += histCount('opponent',a,b); }); });
+      part.score = partnerScore*2 + oppScore;
+    });
+    partitions.sort(function(x,y){ return x.score-y.score; });
+    var best = partitions[0].score;
+    var tied = partitions.filter(function(x){ return x.score===best; });
+    return tied[Math.floor(Math.random()*tied.length)];
+  }
+
+  // ---------- Core engine ----------
+  function totalActivePlayers(){
+    var n = state.pool.length;
+    state.proposals.forEach(function(pr){ n += pr.members.length; });
+    state.courts.forEach(function(ct){
+      if (ct.status==='playing'){
+        n += ct.teamA.length + ct.teamB.length;
+      }
+    });
+    return n;
+  }
+
+  function lowPoolActive(){ return state.pool.length <= 3; }
+  function effectiveCourtMode(court){
+    if (court.mode==='singles') return 'singles';
+    if (lowPoolActive() && court.status==='playing') return 'server-out';
+    return court.mode;
+  }
+  function rotateOutPlayer(courtId, playerId){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='playing') return;
+    if (effectiveCourtMode(court) !== 'server-out') return;
+    if (state.pool.length === 0) return; // no one waiting to swap in yet
+    var free = state.pool.slice()
+      .filter(function(pid){ return state.selectedForSingles.indexOf(pid)===-1; })
+      .sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; });
+    if (free.length === 0) return;
+    var incoming = free[0];
+    state.pool.splice(state.pool.indexOf(incoming), 1);
+    ['teamA','teamB'].forEach(function(teamKey){
+      var team = court[teamKey];
+      var idx = team.indexOf(playerId);
+      if (idx>-1) team[idx] = incoming;
+    });
+    state.players[playerId].waitSince = Date.now();
+    state.pool.push(playerId);
+    recompute();
+    renderAll();
+  }
+
+  function availableMoveTargets(sourceCourtId){
+    var reservedCourtIds = {};
+    state.proposals.forEach(function(pr){ reservedCourtIds[pr.courtId]=true; });
+    return state.courts.filter(function(c){
+      return c.id!==sourceCourtId && c.status==='idle' && !reservedCourtIds[c.id];
+    }).sort(function(a,b){ return a.id-b.id; });
+  }
+
+  function beginMove(courtId){
+    state.moveSourceCourtId = (state.moveSourceCourtId===courtId) ? null : courtId;
+    renderAll();
+  }
+
+  function moveCourtGroup(fromId, toId){
+    var from = state.courts.find(function(c){ return c.id===fromId; });
+    var to = state.courts.find(function(c){ return c.id===toId; });
+    if (!from || !to || from.status!=='playing' || to.status!=='idle') return;
+    to.status = 'playing'; to.mode = from.mode; to.teamA = from.teamA; to.teamB = from.teamB;
+    from.status = 'idle'; from.mode = null; from.teamA = []; from.teamB = [];
+    state.moveSourceCourtId = null;
+    recompute();
+    renderAll();
+  }
+
+  function toggleSinglesSelect(playerId){
+    var idx = state.selectedForSingles.indexOf(playerId);
+    if (idx>-1){
+      state.selectedForSingles.splice(idx,1);
+    } else if (state.selectedForSingles.length<2){
+      state.selectedForSingles.push(playerId);
+    }
+    recompute();
+    renderAll();
+  }
+
+  function lowestIdleCourt(){
+    var reservedCourtIds = {};
+    state.proposals.forEach(function(pr){ reservedCourtIds[pr.courtId]=true; });
+    var open = state.courts.filter(function(c){ return c.status==='idle' && !reservedCourtIds[c.id]; })
+      .sort(function(a,b){ return a.id-b.id; });
+    return open[0] || null;
+  }
+
+  function startSingles(){
+    if (state.selectedForSingles.length!==2) return;
+    var court = lowestIdleCourt();
+    if (!court) return;
+    var p1 = state.selectedForSingles[0], p2 = state.selectedForSingles[1];
+    [p1,p2].forEach(function(pid){
+      var idx = state.pool.indexOf(pid);
+      if (idx>-1) state.pool.splice(idx,1);
+    });
+    court.status = 'playing'; court.mode = 'singles'; court.teamA = [p1]; court.teamB = [p2];
+    state.selectedForSingles = [];
+    recompute();
+    renderAll();
+  }
+
+  function closeCourt(courtId){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='idle') return;
+    court.status = 'closed';
+    renderAll();
+  }
+
+  function reopenCourt(courtId){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='closed') return;
+    court.status = 'idle';
+    recompute();
+    renderAll();
+  }
+
+  function recompute(){
+    var reservedCourtIds = {};
+    state.proposals.forEach(function(pr){ reservedCourtIds[pr.courtId]=true; });
+
+    var openCourts = state.courts
+      .filter(function(ct){ return ct.status==='idle' && !reservedCourtIds[ct.id]; })
+      .sort(function(a,b){ return a.id-b.id; });
+
+    var free = state.pool.slice()
+      .filter(function(pid){ return state.selectedForSingles.indexOf(pid)===-1; })
+      .sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; });
+
+    while (openCourts.length > 0 && free.length >= 4){
+      var chosen = free.splice(0, 4);
+      var court = openCourts.shift();
+      var partition = pickBestPartition(chosen);
+
+      // remove chosen from pool, mark court reserved
+      chosen.forEach(function(pid){
+        var idx = state.pool.indexOf(pid);
+        if (idx>-1) state.pool.splice(idx,1);
+      });
+      court.status = 'reserved';
+
+      state.proposals.push({
+        id: uid('pr'),
+        courtId: court.id,
+        members: chosen,
+        teamA: partition.teamA,
+        teamB: partition.teamB,
+        expiresAt: Date.now() + PROPOSAL_TTL
+      });
+    }
+  }
+
+  function dissolveProposal(proposalId, animate){
+    var idx = state.proposals.findIndex(function(p){ return p.id===proposalId; });
+    if (idx===-1) return;
+    var pr = state.proposals[idx];
+    var court = state.courts.find(function(c){ return c.id===pr.courtId; });
+    if (court && court.status==='reserved') court.status='idle';
+    pr.members.forEach(function(pid){
+      state.players[pid].waitSince = Date.now();
+      state.pool.push(pid);
+    });
+    state.proposals.splice(idx,1);
+  }
+
+  function acceptProposal(proposalId){
+    var pr = state.proposals.find(function(p){ return p.id===proposalId; });
+    if (!pr) return;
+    var court = state.courts.find(function(c){ return c.id===pr.courtId; });
+    court.status = 'playing';
+    court.mode = 'doubles';
+    court.teamA = pr.teamA;
+    court.teamB = pr.teamB;
+    bumpHistoryForMatch(pr.teamA, pr.teamB);
+    pr.members.forEach(function(pid){ state.players[pid].gamesPlayed++; });
+    state.proposals = state.proposals.filter(function(p){ return p.id!==proposalId; });
+    recompute();
+    renderAll();
+  }
+
+  function removeFromProposal(proposalId, playerId){
+    var pr = state.proposals.find(function(p){ return p.id===proposalId; });
+    if (!pr) return;
+    // whole proposal dissolves; the removed player leaves the system (checked out),
+    // the rest go back to the free pool for a fresh recompute
+    var court = state.courts.find(function(c){ return c.id===pr.courtId; });
+    if (court && court.status==='reserved') court.status='idle';
+    pr.members.forEach(function(pid){
+      if (pid===playerId){
+        delete state.players[pid]; // stepped out / left
+      } else {
+        state.players[pid].waitSince = Date.now();
+        state.pool.push(pid);
+      }
+    });
+    state.proposals = state.proposals.filter(function(p){ return p.id!==proposalId; });
+    recompute();
+    renderAll();
+  }
+
+  function finishMatch(courtId, winner){
+    var court = state.courts.find(function(c){ return c.id===courtId; });
+    if (!court || court.status!=='playing') return;
+    var allPlayers = court.teamA.concat(court.teamB);
+    allPlayers.forEach(function(pid){
+      state.players[pid].waitSince = Date.now();
+      state.pool.push(pid);
+    });
+    court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
+    recompute();
+    renderAll();
+  }
+
+  function addPlayer(name){
+    if (!name) return;
+    var id = makePlayer(name, 0);
+    state.pool.push(id);
+    recompute();
+    renderAll();
+  }
+
+  function removeFreeAgent(playerId){
+    var idx = state.pool.indexOf(playerId);
+    if (idx>-1) state.pool.splice(idx,1);
+    var selIdx = state.selectedForSingles.indexOf(playerId);
+    if (selIdx>-1) state.selectedForSingles.splice(selIdx,1);
+    delete state.players[playerId];
+    renderAll();
+  }
+
+  function simulateBusyStretch(){
+    var playing = state.courts.filter(function(c){ return c.status==='playing'; });
+    var picks = playing.sort(function(){ return Math.random()-0.5; }).slice(0,3);
+    picks.forEach(function(c){ finishMatch(c.id, 'A'); });
+  }
+
+  // ---------- Render ----------
+  function fmtWait(ms){
+    var mins = Math.max(0, Math.floor(ms/60000));
+    return mins<1 ? "just now" : mins+"m wait";
+  }
+  function nm(pid){ return state.players[pid] ? state.players[pid].name : "—"; }
+
+  function renderHeader(){
+    document.getElementById('headcountNum').textContent = totalActivePlayers();
+    var banner = document.getElementById('banner');
+    var msg = lowPoolActive() ? "3 or fewer waiting — every court is running Server-Out to keep games moving" : '';
+    if (msg){
+      banner.classList.add('show');
+      document.getElementById('bannerText').textContent = msg;
+    } else {
+      banner.classList.remove('show');
+    }
+  }
+
+  function renderCourts(){
+    var grid = document.getElementById('courtsGrid');
+    grid.innerHTML = '';
+    state.courts.forEach(function(court){
+      var el = document.createElement('div');
+      el.className = 'court ' + court.status;
+      var effMode = effectiveCourtMode(court);
+      var badgeClass = court.status==='closed' ? 'closed' : court.status==='idle' ? 'idle' : (court.status==='reserved' ? 'reserved' : (effMode==='server-out' ? 'server-out' : (effMode==='singles' ? 'singles' : '')));
+      var badgeText = court.status==='closed' ? 'Closed' : court.status==='idle' ? 'Open' : (court.status==='reserved' ? 'Proposed' : (effMode==='server-out' ? 'Server-out' : (effMode==='singles' ? 'Singles' : 'Doubles')));
+
+      var body = '<div class="court-top"><span class="court-id">Court ' + court.id + '</span>' +
+        '<span class="mode-badge ' + badgeClass + '">' + badgeText + '</span></div>';
+
+      if (court.status==='playing'){
+        if (effMode==='singles'){
+          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamA[0]) + '</b></div>' +
+            '<button class="score-btn" data-court="'+court.id+'" data-winner="A">Won</button></div>';
+          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamB[0]) + '</b></div>' +
+            '<button class="score-btn" data-court="'+court.id+'" data-winner="B">Won</button></div>';
+        } else {
+          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamA[0]) + '</b> <span class="amp">&amp;</span> <b>' + nm(court.teamA[1]) + '</b></div>' +
+            '<button class="score-btn" data-court="'+court.id+'" data-winner="A">Won</button></div>';
+          body += '<div class="team-row"><div class="team-names"><b>' + nm(court.teamB[0]) + '</b> <span class="amp">&amp;</span> <b>' + nm(court.teamB[1]) + '</b></div>' +
+            '<button class="score-btn" data-court="'+court.id+'" data-winner="B">Won</button></div>';
+        }
+        if (effMode==='server-out'){
+          body += '<div class="out-grid">';
+          court.teamA.concat(court.teamB).forEach(function(pid){
+            body += '<button class="out-btn" data-out-court="'+court.id+'" data-out-player="'+pid+'">'+nm(pid)+' · Out</button>';
+          });
+          body += '</div>';
+        }
+        var isSource = state.moveSourceCourtId===court.id;
+        body += '<button class="move-btn' + (isSource?' active':'') + '" data-move-source="'+court.id+'">' +
+          (isSource ? 'Cancel move' : 'Move to…') + '</button>';
+      } else if (court.status==='reserved'){
+        body += '<div class="reserved-msg">Next group proposed — see swap pool</div>';
+      } else if (court.status==='closed'){
+        body += '<div class="idle-msg">Not available tonight</div>';
+        body += '<button class="reopen-btn" data-reopen="'+court.id+'">Reopen court</button>';
+      } else {
+        if (state.moveSourceCourtId!==null){
+          var targets = availableMoveTargets(state.moveSourceCourtId);
+          var isTarget = targets.some(function(c){ return c.id===court.id; });
+          if (isTarget){
+            body += '<button class="move-target-btn" data-move-target="'+court.id+'">Move here</button>';
+          } else {
+            body += '<div class="idle-msg">Not available</div>';
+          }
+        } else {
+          body += '<div class="idle-msg">Open — waiting for next group</div>';
+          body += '<button class="close-btn" data-close="'+court.id+'">Close court</button>';
+        }
+      }
+      body += '<div class="pending-flash"></div>';
+      el.innerHTML = body;
+      grid.appendChild(el);
+    });
+
+    grid.querySelectorAll('.move-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        beginMove(parseInt(btn.getAttribute('data-move-source'),10));
+      });
+    });
+    grid.querySelectorAll('.move-target-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        moveCourtGroup(state.moveSourceCourtId, parseInt(btn.getAttribute('data-move-target'),10));
+      });
+    });
+    grid.querySelectorAll('.close-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        closeCourt(parseInt(btn.getAttribute('data-close'),10));
+      });
+    });
+    grid.querySelectorAll('.reopen-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        reopenCourt(parseInt(btn.getAttribute('data-reopen'),10));
+      });
+    });
+
+    grid.querySelectorAll('.score-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var courtId = parseInt(btn.getAttribute('data-court'),10);
+        var winner = btn.getAttribute('data-winner');
+        var courtEl = btn.closest('.court');
+        courtEl.querySelectorAll('.score-btn').forEach(function(b){ b.disabled = true; });
+        var flash = courtEl.querySelector('.pending-flash');
+        flash.textContent = 'Recorded — shuffling players…';
+        flash.classList.add('show');
+        setTimeout(function(){ finishMatch(courtId, winner); }, 700);
+      });
+    });
+    grid.querySelectorAll('.out-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        rotateOutPlayer(parseInt(btn.getAttribute('data-out-court'),10), btn.getAttribute('data-out-player'));
+      });
+    });
+  }
+
+  function renderProposals(){
+    var list = document.getElementById('proposalsList');
+    document.getElementById('proposalCount').textContent = state.proposals.length;
+    list.innerHTML = '';
+    if (state.proposals.length===0){
+      list.innerHTML = '<div class="empty-note">No swaps proposed right now. When enough players free up, a preview will appear here.</div>';
+      return;
+    }
+    state.proposals.forEach(function(pr){
+      var el = document.createElement('div');
+      el.className = 'proposal';
+      var remaining = Math.max(0, pr.expiresAt - Date.now());
+      var pct = Math.round((remaining/PROPOSAL_TTL)*100);
+
+      var showServerOut = lowPoolActive();
+      var html = '<div class="proposal-top"><span class="target-chip">→ Court ' + pr.courtId + '</span>' +
+        (showServerOut ? '<span class="mode-badge server-out" style="margin-left:6px;">Server-out</span>' : '') +
+        '</div>';
+      html += '<div class="timer-track"><div class="timer-fill" style="width:'+pct+'%"></div></div>';
+      html += '<div class="teams-preview">';
+      html += '<div class="team-line">Team 1: <b>' + nm(pr.teamA[0]) + '</b> &amp; <b>' + nm(pr.teamA[1]) + '</b></div>';
+      html += '<div class="team-line">Team 2: <b>' + nm(pr.teamB[0]) + '</b> &amp; <b>' + nm(pr.teamB[1]) + '</b></div>';
+      html += '</div>';
+      html += '<div class="chips-row">';
+      pr.members.forEach(function(pid){
+        html += '<span class="chip" data-pr="'+pr.id+'" data-player="'+pid+'">'+nm(pid)+' <span class="x">✕</span></span>';
+      });
+      html += '</div>';
+      html += '<div class="proposal-actions"><button class="accept-btn" data-pr="'+pr.id+'">Accept &amp; start</button></div>';
+      el.innerHTML = html;
+      list.appendChild(el);
+    });
+
+    list.querySelectorAll('.chip').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        var prId = chip.getAttribute('data-pr');
+        var playerId = chip.getAttribute('data-player');
+        var card = chip.closest('.proposal');
+        card.classList.add('leaving');
+        setTimeout(function(){ removeFromProposal(prId, playerId); }, 160);
+      });
+    });
+    list.querySelectorAll('.accept-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var prId = btn.getAttribute('data-pr');
+        var card = btn.closest('.proposal');
+        card.classList.add('leaving');
+        setTimeout(function(){ acceptProposal(prId); }, 160);
+      });
+    });
+  }
+
+  function renderFreeAgents(){
+    var listEl = document.getElementById('freeList');
+    var note = document.getElementById('freeEmptyNote');
+    var hint = document.getElementById('singlesHint');
+    var singlesBtn = document.getElementById('startSinglesBtn');
+    document.getElementById('freeCount').textContent = state.pool.length;
+    listEl.innerHTML = '';
+    if (state.pool.length===0){
+      note.textContent = '';
+      hint.style.display = 'none';
+      singlesBtn.style.display = 'none';
+      return;
+    }
+    var needed = 4;
+    note.textContent = state.pool.length < needed
+      ? 'Waiting for ' + (needed - state.pool.length) + ' more to fill the next group.'
+      : '';
+    state.pool.slice().sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; })
+      .forEach(function(pid){
+        var p = state.players[pid];
+        var el = document.createElement('span');
+        el.className = 'free-chip' + (state.selectedForSingles.indexOf(pid)>-1 ? ' selected' : '');
+        el.setAttribute('data-select', pid);
+        el.innerHTML = p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
+          (p.gamesPlayed>0 ? ' <span class="played">'+p.gamesPlayed+'g</span>' : '') +
+          ' <span class="rm" data-remove="'+pid+'">✕</span>';
+        listEl.appendChild(el);
+      });
+    listEl.querySelectorAll('.free-chip').forEach(function(chipEl){
+      chipEl.addEventListener('click', function(e){
+        if (e.target.classList.contains('rm')) return; // handled separately, below
+        toggleSinglesSelect(chipEl.getAttribute('data-select'));
+      });
+    });
+    listEl.querySelectorAll('[data-remove]').forEach(function(x){
+      x.addEventListener('click', function(e){
+        e.stopPropagation();
+        removeFreeAgent(x.getAttribute('data-remove'));
+      });
+    });
+
+    if (state.selectedForSingles.length===2){
+      hint.style.display = 'none';
+      singlesBtn.style.display = 'block';
+      singlesBtn.textContent = 'Start singles: ' + nm(state.selectedForSingles[0]) + ' vs ' + nm(state.selectedForSingles[1]);
+      singlesBtn.disabled = !lowestIdleCourt();
+      singlesBtn.title = lowestIdleCourt() ? '' : 'No open court free right now';
+    } else {
+      hint.style.display = 'block';
+      singlesBtn.style.display = 'none';
+    }
+  }
+
+  function renderAll(){
+    renderHeader();
+    renderCourts();
+    renderProposals();
+    renderFreeAgents();
+  }
+
+  // ---------- QR faux pattern ----------
+  function buildQr(){
+    var grid = document.getElementById('qrGrid');
+    var pattern = [1,0,1,1,0,1, 0,1,0,0,1,0, 1,1,1,0,1,1, 0,0,1,1,0,0, 1,0,0,1,1,0, 0,1,1,0,0,1];
+    grid.innerHTML = '';
+    pattern.forEach(function(v){
+      var d = document.createElement('div');
+      if (v) d.className='on';
+      grid.appendChild(d);
+    });
+  }
+
+  // ---------- Modal wiring ----------
+  var backdrop = document.getElementById('modalBackdrop');
+  var nameInput = document.getElementById('nameInput');
+  function openModal(){ backdrop.classList.add('show'); nameInput.value=''; setTimeout(function(){nameInput.focus();},50); }
+  function closeModal(){ backdrop.classList.remove('show'); }
+  document.getElementById('addPlayerBtn').addEventListener('click', openModal);
+  document.getElementById('qrTile').addEventListener('click', openModal);
+  document.getElementById('cancelAdd').addEventListener('click', closeModal);
+  document.getElementById('confirmAdd').addEventListener('click', function(){
+    addPlayer(nameInput.value.trim());
+    closeModal();
+  });
+  nameInput.addEventListener('keydown', function(e){
+    if (e.key==='Enter' || e.keyCode===13 || e.which===13){
+      e.preventDefault();
+      addPlayer(nameInput.value.trim());
+      closeModal();
+    }
+  });
+  document.getElementById('demoBtn').addEventListener('click', simulateBusyStretch);
+  document.getElementById('startSinglesBtn').addEventListener('click', startSingles);
+
+  // ---------- Init ----------
+  seed();
+  recompute();
+  buildQr();
+  renderAll();
+
+  setInterval(function(){
+    var changed = false;
+    state.proposals.slice().forEach(function(pr){
+      if (Date.now() > pr.expiresAt){ dissolveProposal(pr.id); changed = true; }
+    });
+    if (changed){ recompute(); renderAll(); }
+    else {
+      // just refresh timers/wait labels without full re-render cost
+      renderProposals();
+      renderFreeAgents();
+    }
+  }, 1000);
+
+})();
+</script>
+</body>
+</html>
