@@ -342,7 +342,7 @@
         <div class="qr-grid" id="qrGrid"></div>
         <div class="qr-label"><b>Self check-in</b>scan or tap</div>
       </div>
-      <button class="btn primary" id="addPlayerBtn">+ Add player</button>
+      <button class="btn primary" id="addPlayerBtn">+ Add Me</button>
     </div>
   </header>
 
@@ -690,11 +690,12 @@ import {
   }
 
   // Flip from pre-session sign-up mode into the live board: whoever already
-  // signed up lands in the waiting list and is auto-grouped into pools.
+  // signed up lands in the waiting list, full stop — no auto-formed pools.
+  // The night starts manual: the first pool comes from someone dragging
+  // names together. The automatic engine only takes over from there.
   function startSession(){
     if (state.sessionStarted) return;
     state.sessionStarted = true;
-    recompute();
     commit();
   }
 
@@ -1017,7 +1018,7 @@ import {
   function renderHeader(){
     document.getElementById('headcountNum').textContent = totalActivePlayers();
     document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
-    document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add player' : '+ Sign up';
+    document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
     var banner = document.getElementById('banner');
     var msg = (state.sessionStarted && lowPoolActive() && anyCourtPlaying()) ? "3 or fewer waiting — every court is running Server-Out to keep games moving" : '';
     if (msg){
