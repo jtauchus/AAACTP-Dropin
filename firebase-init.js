@@ -33,3 +33,13 @@ export function freshBoardState(){
     sessionStarted: false
   };
 }
+
+// Persistent roster of regulars, separate from the weekly board document so
+// it survives every "Reset for next Friday" — that's the whole point of it.
+export const ROSTER_DOC_PATH = ["roster", "regulars"];
+
+// Collision-resistant id, shared so player ids look/behave the same whether
+// they're created by a self check-in on the board or a bulk add from admin.
+export function uid(prefix){
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+}

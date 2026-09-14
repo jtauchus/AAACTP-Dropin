@@ -14,7 +14,8 @@ phone and it shows up on the iPad instantly, and vice versa. Per-device UI
 state (which court you're mid-move on, which two names you've tapped for
 singles) stays local and never syncs, so one device's in-progress action
 doesn't leak onto another's screen. `admin.html` is a separate, unlinked page
-for resetting the board between Friday sessions.
+for resetting the board between Friday sessions, and for keeping a persistent
+roster of regulars that can be bulk-added to a night's sign-up list in one go.
 
 ## Core mechanics
 
@@ -74,6 +75,8 @@ for resetting the board between Friday sessions.
 ## Files
 
 - `index.html` — the live board (courts, swap pool, waiting list, sign-ups).
-- `admin.html` — admin-only page to reset the board for next Friday. Not
-  linked from `index.html` on purpose; bookmark it directly.
+- `admin.html` — admin-only page to reset the board for next Friday and to
+  manage a persistent roster of regulars (`roster/regulars`, separate from
+  the weekly board so it survives every reset) for bulk-adding to a night's
+  sign-up list. Not linked from `index.html` on purpose; bookmark it directly.
 - `firebase-init.js` — shared Firebase/Firestore setup used by both pages.

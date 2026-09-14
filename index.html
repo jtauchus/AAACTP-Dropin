@@ -406,7 +406,7 @@
 </div>
 
 <script type="module">
-import { db, freshBoardState } from './firebase-init.js';
+import { db, freshBoardState, uid } from './firebase-init.js';
 import {
   doc, onSnapshot, setDoc
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
@@ -439,10 +439,6 @@ import {
   function commit(){
     persistState();
     renderAll();
-  }
-
-  function uid(prefix){
-    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
   }
 
   function makePlayer(name, waitOffsetMs){

@@ -76,6 +76,23 @@
     transition:opacity .2s ease;
   }
   .toast.show{ opacity:1; }
+
+  .roster-add-row{ display:flex; gap:8px; margin-bottom:14px; }
+  .roster-add-row input{
+    flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;
+  }
+  .roster-add-row .btn{ width:auto; padding:10px 16px; }
+  .roster-empty{ font-size:12.5px; color:var(--chalk-dim); }
+  .roster-list{ display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto; }
+  .roster-row{
+    display:flex; align-items:center; gap:10px; padding:8px 4px;
+    border-bottom:1px solid var(--line); font-size:13.5px; cursor:pointer;
+  }
+  .roster-row:last-child{ border-bottom:none; }
+  .roster-row input[type="checkbox"]{ width:17px; height:17px; accent-color:var(--ball); flex-shrink:0; }
+  .roster-name{ flex:1; }
+  .roster-remove{ color:var(--danger); font-size:13px; padding:2px 6px; }
 </style>
 </head>
 <body>
@@ -94,6 +111,24 @@
       <div class="stat-row"><span class="label">In swap-pool groups</span><span class="value" id="statPools">—</span></div>
       <div class="stat-row"><span class="label">Courts in play</span><span class="value" id="statPlaying">—</span></div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Regular players</h2>
+    <p>Keep a running roster of your regulars — it's separate from tonight's
+       board, so it survives every weekly reset. Check off who's here and
+       bulk-add them to tonight's sign-up list in one go.</p>
+    <div class="roster-add-row">
+      <input type="text" id="rosterNameInput" placeholder="Add a regular's name" maxlength="24" />
+      <button class="btn" id="rosterAddBtn">Add</button>
+    </div>
+    <div class="roster-empty" id="rosterEmptyNote">No regulars saved yet.</div>
+    <div class="roster-list" id="rosterList"></div>
+    <div class="actions" id="rosterBulkActions" style="display:none;">
+      <button class="btn ghost" id="rosterSelectAllBtn">Select all</button>
+      <button class="btn ghost" id="rosterSelectNoneBtn">Select none</button>
+    </div>
+    <button class="btn primary" id="rosterBulkAddBtn" style="margin-top:10px; display:none;">Add checked to tonight</button>
   </div>
 
   <div class="card">
@@ -117,16 +152,24 @@
   </div>
 </div>
 
-<div class="toast" id="toast">Board reset for next Friday.</div>
+<div class="toast" id="toast"></div>
 
 <script type="module">
-import { db, freshBoardState } from './firebase-init.js';
+import { db, freshBoardState, uid } from './firebase-init.js';
 import {
-  doc, onSnapshot, setDoc
+  doc, onSnapshot, setDoc, getDoc, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 var stateDocRef = doc(db, 'boards', 'friday');
+var rosterDocRef = doc(db, 'roster', 'regulars');
 var latestState = null;
+
+function showToast(message){
+  var toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(function(){ toast.classList.remove('show'); }, 3000);
+}
 
 function renderStats(){
   var modePill = document.getElementById('modePill');
@@ -170,12 +213,110 @@ document.getElementById('confirmCancel').addEventListener('click', function(){
 document.getElementById('confirmReset').addEventListener('click', function(){
   confirmBackdrop.classList.remove('show');
   setDoc(stateDocRef, freshBoardState()).then(function(){
-    var toast = document.getElementById('toast');
-    toast.classList.add('show');
-    setTimeout(function(){ toast.classList.remove('show'); }, 3000);
+    showToast('Board reset for next Friday.');
   }).catch(function(err){
     console.error('Failed to reset board:', err);
     alert("Couldn't reset the board — check your connection and try again.");
+  });
+});
+
+// ---------- Regulars roster (persists across weekly resets) ----------
+var rosterNames = [];
+var rosterChecked = {}; // name -> checked, defaults to true the first time we see it
+
+function renderRoster(){
+  var listEl = document.getElementById('rosterList');
+  var note = document.getElementById('rosterEmptyNote');
+  var bulkActions = document.getElementById('rosterBulkActions');
+  var bulkAddBtn = document.getElementById('rosterBulkAddBtn');
+  listEl.innerHTML = '';
+
+  if (rosterNames.length===0){
+    note.style.display = 'block';
+    bulkActions.style.display = 'none';
+    bulkAddBtn.style.display = 'none';
+    return;
+  }
+  note.style.display = 'none';
+  bulkActions.style.display = 'flex';
+  bulkAddBtn.style.display = 'block';
+
+  rosterNames.slice().sort(function(a,b){ return a.localeCompare(b); }).forEach(function(name){
+    var row = document.createElement('label');
+    row.className = 'roster-row';
+    row.innerHTML =
+      '<input type="checkbox" data-roster-check="'+name+'"' + (rosterChecked[name] ? ' checked' : '') + '>' +
+      '<span class="roster-name">'+name+'</span>' +
+      '<span class="roster-remove" data-roster-remove="'+name+'">✕</span>';
+    listEl.appendChild(row);
+  });
+  listEl.querySelectorAll('[data-roster-check]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      rosterChecked[cb.getAttribute('data-roster-check')] = cb.checked;
+    });
+  });
+  listEl.querySelectorAll('[data-roster-remove]').forEach(function(x){
+    x.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var name = x.getAttribute('data-roster-remove');
+      delete rosterChecked[name];
+      setDoc(rosterDocRef, { names: arrayRemove(name) }, { merge:true }).catch(function(err){
+        console.error('Failed to remove regular:', err);
+      });
+    });
+  });
+}
+
+onSnapshot(rosterDocRef, function(snap){
+  rosterNames = (snap.exists() && snap.data().names) ? snap.data().names : [];
+  rosterNames.forEach(function(n){ if (!(n in rosterChecked)) rosterChecked[n] = true; });
+  renderRoster();
+}, function(err){
+  console.error('Roster sync error:', err);
+});
+
+var rosterNameInput = document.getElementById('rosterNameInput');
+function addRegularFromInput(){
+  var name = rosterNameInput.value.trim();
+  if (!name) return;
+  setDoc(rosterDocRef, { names: arrayUnion(name) }, { merge:true }).catch(function(err){
+    console.error('Failed to add regular:', err);
+  });
+  rosterNameInput.value = '';
+}
+document.getElementById('rosterAddBtn').addEventListener('click', addRegularFromInput);
+rosterNameInput.addEventListener('keydown', function(e){
+  if (e.key==='Enter' || e.keyCode===13){
+    e.preventDefault();
+    addRegularFromInput();
+  }
+});
+
+document.getElementById('rosterSelectAllBtn').addEventListener('click', function(){
+  rosterNames.forEach(function(n){ rosterChecked[n] = true; });
+  renderRoster();
+});
+document.getElementById('rosterSelectNoneBtn').addEventListener('click', function(){
+  rosterNames.forEach(function(n){ rosterChecked[n] = false; });
+  renderRoster();
+});
+
+document.getElementById('rosterBulkAddBtn').addEventListener('click', function(){
+  var selected = rosterNames.filter(function(n){ return rosterChecked[n]; });
+  if (selected.length===0) return;
+  getDoc(stateDocRef).then(function(snap){
+    var boardState = snap.exists() ? snap.data() : freshBoardState();
+    selected.forEach(function(name){
+      var id = uid('p');
+      boardState.players[id] = { id:id, name:name, waitSince: Date.now(), gamesPlayed:0 };
+      boardState.pool.push(id);
+    });
+    return setDoc(stateDocRef, boardState);
+  }).then(function(){
+    showToast('Added ' + selected.length + ' player' + (selected.length===1 ? '' : 's') + " to tonight's board.");
+  }).catch(function(err){
+    console.error('Failed to bulk-add regulars:', err);
+    alert("Couldn't add players — check your connection and try again.");
   });
 });
 </script>
