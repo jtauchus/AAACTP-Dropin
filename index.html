@@ -96,6 +96,8 @@
   .btn.primary{ background:var(--ball); color:var(--ink); border-color:var(--ball); font-weight:700; }
   .btn.ghost{ background:transparent; color:var(--chalk-dim); font-size:12px; padding:8px 10px; }
   .btn.danger{ background:var(--danger); color:var(--ink); border-color:var(--danger); font-weight:700; }
+  .btn:disabled{ opacity:.35; cursor:default; }
+  .icon-btn{ padding:8px 11px; font-size:15px; line-height:1; }
   .qr-tile{
     display:flex; align-items:center; gap:8px;
     border:1px solid var(--line); background:var(--panel-3);
@@ -298,6 +300,15 @@
     background:var(--panel); color:var(--chalk); font-size:14px; margin-bottom:12px;
   }
   .modal-actions{ display:flex; gap:8px; justify-content:flex-end; }
+  .modal.wide{ width:min(440px, 92vw); }
+  .history-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 4px; border-bottom:1px solid var(--line); font-size:13px;
+  }
+  .history-row:last-child{ border-bottom:none; }
+  .history-label{ color:var(--chalk); }
+  .history-time{ color:var(--chalk-dim); font-size:11.5px; margin-top:2px; }
+  .history-restore{ width:auto; padding:6px 12px; font-size:12px; flex-shrink:0; }
 
   ::-webkit-scrollbar{ width:6px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
@@ -344,10 +355,14 @@
     <div class="title-block">
       <h1>Friday Drop-In</h1>
       <div class="sub">Pioneer HS · 8 courts</div>
+      <div class="sub" id="sessionDateLabel"></div>
     </div>
     <div id="banner" class="banner"><span class="dot"></span><span id="bannerText"></span></div>
     <div class="head-actions">
       <div class="headcount"><b id="headcountNum">0</b> <span id="headcountLabel">checked in</span></div>
+      <button class="btn ghost icon-btn" id="undoBtn" title="Nothing to undo" disabled>↶</button>
+      <button class="btn ghost icon-btn" id="redoBtn" title="Nothing to redo" disabled>↷</button>
+      <button class="btn ghost icon-btn" id="historyBtn" title="Change history">🕘</button>
       <div class="qr-tile" id="qrTile">
         <div class="qr-grid" id="qrGrid"></div>
         <div class="qr-label"><b>Self check-in</b>scan or tap</div>
@@ -415,6 +430,17 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="historyBackdrop">
+  <div class="modal wide">
+    <h3>Change history</h3>
+    <p>Undo/redo (↶ ↷ in the header) share this list — or jump straight to any earlier point below.</p>
+    <div id="historyList"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button class="btn ghost" id="historyCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { db, freshBoardState, uid } from './firebase-init.js';
 import {
@@ -446,9 +472,71 @@ import {
       console.error('Failed to sync board state:', err);
     });
   }
-  function commit(){
+
+  // ---------- Change history (shared undo/redo) ----------
+  // A separate Firestore doc holds two stacks of whole-state snapshots, so
+  // "someone hit the wrong thing" can be rolled back from any device, not
+  // just the one that made the mistake. Capped well under Firestore's 1MB
+  // doc limit — a snapshot per player/court/pool is tiny, but we still keep
+  // the history shallow rather than unbounded.
+  var historyDocRef = doc(db, 'boards', 'friday_history');
+  var historyState = { undo: [], redo: [] };
+  var MAX_HISTORY = 15;
+
+  function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  function persistHistory(){
+    setDoc(historyDocRef, historyState).catch(function(err){
+      console.error('Failed to sync history:', err);
+    });
+  }
+
+  // Mutating functions capture `before` (a clone of state taken before they
+  // touch anything) and pass it here with a human-readable label. Actions
+  // that skip the label (purely local UI, e.g. a singles tap) never touch
+  // the history stack.
+  function commit(label, before){
+    if (label && before){
+      historyState.undo.push({ id: uid('h'), ts: Date.now(), label: label, state: before });
+      if (historyState.undo.length > MAX_HISTORY) historyState.undo.shift();
+      historyState.redo = [];
+      persistHistory();
+    }
     persistState();
     renderAll();
+  }
+
+  // Pure stack transition shared by undo(), redo(), and jumping to an
+  // arbitrary history entry — moves one snapshot between the two stacks
+  // without touching Firestore or the DOM, so a multi-step jump only
+  // persists/renders once, at the end.
+  function stepHistory(fromKey, toKey){
+    var fromStack = historyState[fromKey];
+    if (!fromStack.length) return false;
+    var entry = fromStack.pop();
+    historyState[toKey].push({ id: uid('h'), ts: Date.now(), label: entry.label, state: deepClone(state) });
+    if (historyState[toKey].length > MAX_HISTORY) historyState[toKey].shift();
+    state = entry.state;
+    return true;
+  }
+
+  function undo(){
+    if (!stepHistory('undo','redo')) return;
+    persistState(); persistHistory(); renderAll();
+  }
+  function redo(){
+    if (!stepHistory('redo','undo')) return;
+    persistState(); persistHistory(); renderAll();
+  }
+
+  // Jump straight to an older undo entry — same mechanics as clicking Undo
+  // repeatedly, so Redo still walks back forward one step at a time after.
+  function restoreToUndoEntry(id){
+    var idx = historyState.undo.findIndex(function(e){ return e.id===id; });
+    if (idx<0) return;
+    var steps = historyState.undo.length - idx;
+    for (var i=0;i<steps;i++){ if (!stepHistory('undo','redo')) break; }
+    persistState(); persistHistory(); renderAll();
   }
 
   function makePlayer(name, waitOffsetMs){
@@ -531,6 +619,8 @@ import {
       .sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; });
     if (free.length === 0) return;
     var incoming = free[0];
+    var label = 'Rotated ' + nm(incoming) + ' in for ' + nm(playerId) + ' on Court ' + courtId;
+    var before = deepClone(state);
     state.pool.splice(state.pool.indexOf(incoming), 1);
     ['teamA','teamB'].forEach(function(teamKey){
       var team = court[teamKey];
@@ -540,7 +630,7 @@ import {
     state.players[playerId].waitSince = Date.now();
     state.pool.push(playerId);
     recompute();
-    commit();
+    commit(label, before);
   }
 
   // A player on an active court needs to leave right now — check them out
@@ -549,6 +639,8 @@ import {
   function removePlayerFromCourt(courtId, playerId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
+    var before = deepClone(state);
+    var label = 'Removed ' + nm(playerId) + ' from play (Court ' + courtId + ')';
     var team = null;
     ['teamA','teamB'].forEach(function(teamKey){
       var idx = court[teamKey].indexOf(playerId);
@@ -559,7 +651,7 @@ import {
     if (court.teamA.length===0 && court.teamB.length===0){
       court.status='idle'; court.mode=null;
     }
-    commit();
+    commit(label, before);
   }
 
   // Same idea, but the player just needs a break, not to leave for good —
@@ -568,6 +660,8 @@ import {
   function movePlayerFromCourtToWaiting(courtId, playerId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
+    var before = deepClone(state);
+    var label = 'Moved ' + nm(playerId) + ' to waiting (Court ' + courtId + ')';
     var team = null;
     ['teamA','teamB'].forEach(function(teamKey){
       var idx = court[teamKey].indexOf(playerId);
@@ -579,7 +673,7 @@ import {
     if (court.teamA.length===0 && court.teamB.length===0){
       court.status='idle'; court.mode=null;
     }
-    commit();
+    commit(label, before);
   }
 
   function courtFullSize(court){ return court.mode==='singles' ? 1 : 2; }
@@ -595,6 +689,8 @@ import {
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
     if (court[teamKey].length >= courtFullSize(court)) return;
+    var before = deepClone(state);
+    var label = 'Added ' + nm(incomingPlayerId) + ' to Court ' + courtId;
 
     var poolIdx = state.pool.indexOf(incomingPlayerId);
     if (poolIdx>-1){
@@ -605,7 +701,7 @@ import {
       movePlayerOutOfPool(srcPool.id, incomingPlayerId);
     }
     court[teamKey].push(incomingPlayerId);
-    commit();
+    commit(label, before);
   }
 
   // Drag a short-handed match's remaining players off the court entirely —
@@ -614,13 +710,15 @@ import {
   function breakUpCourtToWaiting(courtId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
+    var before = deepClone(state);
+    var label = 'Sent Court ' + courtId + ' match back to waiting';
     court.teamA.concat(court.teamB).forEach(function(pid){
       state.players[pid].waitSince = Date.now();
       state.pool.push(pid);
     });
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
     recompute();
-    commit();
+    commit(label, before);
   }
 
   function breakUpCourtToNewPool(courtId){
@@ -628,10 +726,12 @@ import {
     if (!court || court.status!=='playing') return;
     var members = court.teamA.concat(court.teamB);
     if (members.length===0) return;
+    var before = deepClone(state);
+    var label = 'Grouped Court ' + courtId + ' match into a new pool';
     state.pools.push({ id: uid('pool'), members: members, preferredCourtId: null });
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
     recompute();
-    commit();
+    commit(label, before);
   }
 
   // Drag a waiting/pool player onto a specific court player to swap them into
@@ -642,6 +742,8 @@ import {
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
     if (targetPlayerId===incomingPlayerId) return;
+    var before = deepClone(state);
+    var label = 'Swapped ' + nm(incomingPlayerId) + ' in for ' + nm(targetPlayerId) + ' on Court ' + courtId;
     var team = null;
     ['teamA','teamB'].forEach(function(teamKey){
       var idx = court[teamKey].indexOf(targetPlayerId);
@@ -659,7 +761,7 @@ import {
     }
     state.players[targetPlayerId].waitSince = Date.now();
     state.pool.push(targetPlayerId);
-    commit();
+    commit(label, before);
   }
 
   function availableMoveTargets(sourceCourtId){
@@ -678,10 +780,12 @@ import {
     var from = state.courts.find(function(c){ return c.id===fromId; });
     var to = state.courts.find(function(c){ return c.id===toId; });
     if (!from || !to || from.status!=='playing' || to.status!=='idle') return;
+    var before = deepClone(state);
+    var label = 'Moved Court ' + fromId + ' match to Court ' + toId;
     to.status = 'playing'; to.mode = from.mode; to.teamA = from.teamA; to.teamB = from.teamB;
     from.status = 'idle'; from.mode = null; from.teamA = []; from.teamB = [];
     localUi.moveSourceCourtId = null;
-    commit();
+    commit(label, before);
   }
 
   // Purely local: which 1-2 waiting players THIS device has tapped for
@@ -708,27 +812,31 @@ import {
     var court = lowestIdleCourt();
     if (!court) return;
     var p1 = localUi.selectedForSingles[0], p2 = localUi.selectedForSingles[1];
+    var before = deepClone(state);
+    var label = 'Started singles match on Court ' + court.id;
     [p1,p2].forEach(function(pid){
       var idx = state.pool.indexOf(pid);
       if (idx>-1) state.pool.splice(idx,1);
     });
     court.status = 'playing'; court.mode = 'singles'; court.teamA = [p1]; court.teamB = [p2];
     localUi.selectedForSingles = [];
-    commit();
+    commit(label, before);
   }
 
   function closeCourt(courtId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='idle') return;
+    var before = deepClone(state);
     court.status = 'closed';
-    commit();
+    commit('Closed Court ' + courtId, before);
   }
 
   function reopenCourt(courtId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='closed') return;
+    var before = deepClone(state);
     court.status = 'idle';
-    commit();
+    commit('Reopened Court ' + courtId, before);
   }
 
   // Flip from pre-session sign-up mode into the live board: whoever already
@@ -737,8 +845,9 @@ import {
   // names together. The automatic engine only takes over from there.
   function startSession(){
     if (state.sessionStarted) return;
+    var before = deepClone(state);
     state.sessionStarted = true;
-    commit();
+    commit('Started tonight\'s session', before);
   }
 
   // ---------- Swap pool: automatic + hand-built groups of 4 ----------
@@ -771,7 +880,7 @@ import {
       if (p.members.length===4 && p.preferredCourtId!=null){
         var court = state.courts.find(function(c){ return c.id===p.preferredCourtId; });
         if (court && court.status==='idle'){
-          startPoolOnCourt(p.id, p.preferredCourtId);
+          applyStartPoolOnCourt(p.id, p.preferredCourtId);
         }
       }
     });
@@ -806,17 +915,19 @@ import {
     if (!p || p.members.length>=4) return;
     var idx = state.pool.indexOf(playerId);
     if (idx===-1) return;
+    var before = deepClone(state);
     state.pool.splice(idx,1);
     p.members.push(playerId);
-    commit();
+    commit('Added ' + nm(playerId) + ' to a swap pool', before);
   }
 
   function createPoolWithPlayer(playerId){
     var idx = state.pool.indexOf(playerId);
     if (idx===-1) return;
+    var before = deepClone(state);
     state.pool.splice(idx,1);
     state.pools.push({ id: uid('pool'), members:[playerId], preferredCourtId: null });
-    commit();
+    commit('Started a new pool with ' + nm(playerId), before);
   }
 
   // Note: no recompute() here — pulling a member out of a pool (to another
@@ -826,38 +937,47 @@ import {
     if (fromPoolId===toPoolId) return;
     var to = state.pools.find(function(pp){ return pp.id===toPoolId; });
     if (!to || to.members.length>=4) return;
+    var before = deepClone(state);
     var moved = movePlayerOutOfPool(fromPoolId, playerId);
     if (!moved) return;
     to.members.push(playerId);
-    commit();
+    commit('Moved ' + nm(playerId) + ' between pools', before);
   }
 
   // Drag a pool member back out to the waiting list — just relocates them
   // (recompute() may immediately top the pool back up from whoever's free).
   function removeFromFormingPool(poolId, playerId){
+    var before = deepClone(state);
+    var label = 'Moved ' + nm(playerId) + ' back to waiting';
     var moved = movePlayerOutOfPool(poolId, playerId);
     if (!moved) return;
     state.players[playerId].waitSince = Date.now();
     state.pool.push(playerId);
-    commit();
+    commit(label, before);
   }
 
   // "Remove from play" on a pool member checks them out of the system entirely.
   function removeFormingPoolMemberEntirely(poolId, playerId){
+    var before = deepClone(state);
+    var label = 'Removed ' + nm(playerId) + ' from play';
     var moved = movePlayerOutOfPool(poolId, playerId);
     if (!moved) return;
     delete state.players[playerId];
-    commit();
+    commit(label, before);
   }
 
   // Drag a ready (4-player) pool onto an open court to start the match there.
   // A pool of 4 starts doubles; a pool of exactly 2 starts singles — same
   // drag-to-a-court gesture either way, decided by however many are in it
-  // at the moment it's dropped.
-  function startPoolOnCourt(poolId, courtId){
+  // at the moment it's dropped. Split from the commit so recompute()'s
+  // automatic placement (a winner pool returning to its court) can apply
+  // the same mutation as part of the ONE history entry for whatever
+  // triggered that recompute, instead of pushing a confusing entry of
+  // its own for something the operator didn't directly click or drag.
+  function applyStartPoolOnCourt(poolId, courtId){
     var p = state.pools.find(function(pp){ return pp.id===poolId; });
     var court = state.courts.find(function(c){ return c.id===courtId; });
-    if (!p || !court || court.status!=='idle') return;
+    if (!p || !court || court.status!=='idle') return false;
     if (p.members.length===4){
       var partition = pickBestPartition(p.members);
       court.status = 'playing'; court.mode = 'doubles';
@@ -867,11 +987,18 @@ import {
       court.status = 'playing'; court.mode = 'singles';
       court.teamA = [p.members[0]]; court.teamB = [p.members[1]];
     } else {
-      return;
+      return false;
     }
     p.members.forEach(function(pid){ state.players[pid].gamesPlayed++; });
     state.pools = state.pools.filter(function(pp){ return pp.id!==poolId; });
-    commit();
+    return true;
+  }
+
+  function startPoolOnCourt(poolId, courtId){
+    var before = deepClone(state);
+    if (applyStartPoolOnCourt(poolId, courtId)){
+      commit('Started match on Court ' + courtId, before);
+    }
   }
 
   // Matches the drop-in's own format: "Winning team stays on court... and
@@ -882,6 +1009,7 @@ import {
   function finishMatch(courtId, winner){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
+    var before = deepClone(state);
     var winningTeam = winner==='A' ? court.teamA : court.teamB;
     var losingTeam = winner==='A' ? court.teamB : court.teamA;
 
@@ -895,24 +1023,28 @@ import {
 
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
     recompute();
-    commit();
+    commit('Finished match on Court ' + courtId, before);
   }
 
   function addPlayer(name){
     if (!name) return;
+    var before = deepClone(state);
+    var label = (state.sessionStarted ? 'Checked in ' : 'Signed up ') + name;
     var id = makePlayer(name, 0);
     state.pool.push(id);
     recompute();
-    commit();
+    commit(label, before);
   }
 
   function removeFreeAgent(playerId){
+    var before = deepClone(state);
+    var label = 'Removed ' + nm(playerId) + ' from waiting list';
     var idx = state.pool.indexOf(playerId);
     if (idx>-1) state.pool.splice(idx,1);
     var selIdx = localUi.selectedForSingles.indexOf(playerId);
     if (selIdx>-1) localUi.selectedForSingles.splice(selIdx,1);
     delete state.players[playerId];
-    commit();
+    commit(label, before);
   }
 
   // ---------- Drag & drop: waiting <-> swap pool <-> courts ----------
@@ -1056,6 +1188,22 @@ import {
     if (hrs<24) return hrs+'h ago';
     return Math.floor(hrs/24)+'d ago';
   }
+  // state.sessionDate is a "YYYY-MM-DD" string set from admin's date picker
+  // (or null to just mean "today"). Appending a local-midnight time avoids
+  // new Date("YYYY-MM-DD") parsing as UTC and displaying a day early/late
+  // in negative-UTC-offset timezones.
+  function formatSessionDate(dateStr){
+    var d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    return d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  }
+  function fmtAgo(ms){
+    var s = Math.max(0, Math.floor(ms/1000));
+    if (s<5) return 'just now';
+    if (s<60) return s+'s ago';
+    var m = Math.floor(s/60);
+    if (m<60) return m+'m ago';
+    return Math.floor(m/60)+'h ago';
+  }
   function nm(pid){ return state.players[pid] ? state.players[pid].name : "—"; }
   function courtPlayerSpan(pid, courtId, teamKey){
     if (!pid) return '<b class="court-empty-slot" data-court="'+courtId+'" data-team="'+teamKey+'">drop here</b>';
@@ -1063,6 +1211,7 @@ import {
   }
 
   function renderHeader(){
+    document.getElementById('sessionDateLabel').textContent = formatSessionDate(state.sessionDate);
     document.getElementById('headcountNum').textContent = totalActivePlayers();
     document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
     document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
@@ -1333,10 +1482,44 @@ import {
     }
   }
 
+  function renderHistoryUi(){
+    var undoBtn = document.getElementById('undoBtn');
+    var redoBtn = document.getElementById('redoBtn');
+    var canUndo = historyState.undo.length>0;
+    var canRedo = historyState.redo.length>0;
+    undoBtn.disabled = !canUndo;
+    redoBtn.disabled = !canRedo;
+    undoBtn.title = canUndo ? 'Undo: ' + historyState.undo[historyState.undo.length-1].label : 'Nothing to undo';
+    redoBtn.title = canRedo ? 'Redo: ' + historyState.redo[historyState.redo.length-1].label : 'Nothing to redo';
+
+    var listEl = document.getElementById('historyList');
+    if (historyState.undo.length===0){
+      listEl.innerHTML = '<p style="margin:0;">No changes yet tonight.</p>';
+      return;
+    }
+    listEl.innerHTML = '';
+    historyState.undo.slice().reverse().forEach(function(entry){
+      var row = document.createElement('div');
+      row.className = 'history-row';
+      row.innerHTML =
+        '<div><div class="history-label">'+entry.label+'</div>' +
+        '<div class="history-time">'+fmtAgo(Date.now()-entry.ts)+'</div></div>' +
+        '<button class="btn ghost history-restore" data-history-restore="'+entry.id+'">Restore</button>';
+      listEl.appendChild(row);
+    });
+    listEl.querySelectorAll('[data-history-restore]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        restoreToUndoEntry(btn.getAttribute('data-history-restore'));
+        document.getElementById('historyBackdrop').classList.remove('show');
+      });
+    });
+  }
+
   function renderAll(){
     document.getElementById('presessionPanel').classList.toggle('hide', state.sessionStarted);
     document.getElementById('mainView').classList.toggle('hide', !state.sessionStarted);
     renderHeader();
+    renderHistoryUi();
     if (!state.sessionStarted){
       renderSignupList();
       return;
@@ -1385,6 +1568,22 @@ import {
   });
   document.getElementById('startSinglesBtn').addEventListener('click', startSingles);
   document.getElementById('startSessionBtn').addEventListener('click', startSession);
+
+  // ---------- Undo / redo / change history ----------
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('redoBtn').addEventListener('click', redo);
+  document.getElementById('historyBtn').addEventListener('click', function(){
+    renderHistoryUi();
+    document.getElementById('historyBackdrop').classList.add('show');
+  });
+  document.getElementById('historyCloseBtn').addEventListener('click', function(){
+    document.getElementById('historyBackdrop').classList.remove('show');
+  });
+  document.addEventListener('keydown', function(e){
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key==='z' && !e.shiftKey){ e.preventDefault(); undo(); }
+    else if (e.key==='y' || (e.key==='z' && e.shiftKey)){ e.preventDefault(); redo(); }
+  });
 
   // ---------- Player options popup ----------
   var playerMenuBackdrop = document.getElementById('playerMenuBackdrop');
@@ -1440,6 +1639,15 @@ import {
     console.error('Board sync error:', err);
     document.getElementById('loadingOverlay').querySelector('.loading-text').textContent =
       "Can't reach the board — check your connection.";
+  });
+
+  onSnapshot(historyDocRef, function(snap){
+    historyState = (snap.exists() && snap.data()) ? snap.data() : { undo: [], redo: [] };
+    if (!historyState.undo) historyState.undo = [];
+    if (!historyState.redo) historyState.redo = [];
+    renderHistoryUi();
+  }, function(err){
+    console.error('History sync error:', err);
   });
 
   setInterval(function(){

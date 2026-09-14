@@ -114,6 +114,13 @@
   </div>
 
   <div class="card">
+    <h2>Session date</h2>
+    <p>Shown at the top of the board. Defaults to today when unset — update it
+       when you're setting up a specific Friday ahead of time.</p>
+    <input type="date" id="sessionDateInput" style="width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;">
+  </div>
+
+  <div class="card">
     <h2>Regular players</h2>
     <p>Keep a running roster of your regulars — it's separate from tonight's
        board, so it survives every weekly reset. Check off who's here and
@@ -162,6 +169,7 @@ import {
 
 var stateDocRef = doc(db, 'boards', 'friday');
 var rosterDocRef = doc(db, 'roster', 'regulars');
+var historyDocRef = doc(db, 'boards', 'friday_history');
 var latestState = null;
 
 function showToast(message){
@@ -196,11 +204,27 @@ function renderStats(){
   document.getElementById('statPlaying').textContent = courtsPlaying;
 }
 
+var sessionDateInput = document.getElementById('sessionDateInput');
+
 onSnapshot(stateDocRef, function(snap){
   latestState = snap.exists() ? snap.data() : freshBoardState();
   renderStats();
+  // Don't stomp on an in-progress edit if the admin is mid-keystroke when a
+  // sync (their own save echoing back, or another admin's change) arrives.
+  if (document.activeElement !== sessionDateInput){
+    sessionDateInput.value = latestState.sessionDate || '';
+  }
 }, function(err){
   console.error('Admin sync error:', err);
+});
+
+sessionDateInput.addEventListener('change', function(){
+  setDoc(stateDocRef, { sessionDate: sessionDateInput.value || null }, { merge:true }).then(function(){
+    showToast('Session date updated.');
+  }).catch(function(err){
+    console.error('Failed to update session date:', err);
+    alert("Couldn't update the date — check your connection and try again.");
+  });
 });
 
 var confirmBackdrop = document.getElementById('confirmBackdrop');
@@ -212,7 +236,10 @@ document.getElementById('confirmCancel').addEventListener('click', function(){
 });
 document.getElementById('confirmReset').addEventListener('click', function(){
   confirmBackdrop.classList.remove('show');
-  setDoc(stateDocRef, freshBoardState()).then(function(){
+  Promise.all([
+    setDoc(stateDocRef, freshBoardState()),
+    setDoc(historyDocRef, { undo: [], redo: [] })
+  ]).then(function(){
     showToast('Board reset for next Friday.');
   }).catch(function(err){
     console.error('Failed to reset board:', err);

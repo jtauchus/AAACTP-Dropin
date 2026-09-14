@@ -58,6 +58,14 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   using it). Closed courts are invisible to the swap engine, singles
   assignment, and the move-to-another-court picker — everywhere the app
   looks for an open court.
+- **Undo/redo & change history**: the ↶/↷ buttons in the header step back
+  and forward through every check-in, drag, and match result, and the 🕘
+  history panel lists the same stack with a one-tap "Restore" on any past
+  point — so a mis-click on any device can be rolled back from any other
+  device. Backed by a shared Firestore doc (`boards/friday_history`), kept
+  to the last 15 actions.
+- **Session date**: shown at the top of the board (defaults to today);
+  set it ahead of time from `admin.html` when prepping a specific Friday.
 
 ## Suggested next steps
 
