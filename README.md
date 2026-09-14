@@ -19,18 +19,26 @@ for resetting the board between Friday sessions.
 ## Core mechanics
 
 - **8 courts**, each: `idle` (open) / `closed` (unavailable tonight — someone
-  else is using it) / `reserved` (a swap has been proposed for it) / `playing`
-  (doubles, singles, or server-out).
-- **Check-in**: self-serve via a name form (meant to sit behind a QR code), or
-  added by anyone from the board for people without phones.
-- **Swap pool**: when a match finishes, all 4 players drop into a shared free
-  pool. Whenever ≥4 free players and an idle court exist, the engine proposes
-  a foursome for that court — multiple proposals can be pending at once.
-  Proposals expire after ~75s if nobody accepts, returning players to the
-  pool. Tapping any single player out of a proposed group dissolves the whole
-  group back to the pool (nothing partially locks in).
-- **Partner/opponent variety**: when forming a foursome, the engine tries the
-  3 possible team splits and picks whichever minimizes repeat
+  else is using it) / `playing` (doubles, singles, or server-out).
+- **Sign-up / check-in**: people can add their name any time during the week
+  (pre-session sign-up mode); once the board goes live, the same form is used
+  for walk-in check-ins.
+- **Swap pool**: the engine automatically groups waiting players into pools of
+  4, and tops up any in-progress pool the moment enough people are free — but
+  the operator can also hand-build or rearrange a group at any time by
+  dragging waiting players into a pool (or dragging a pool member back out).
+  A full pool gets a "Ready — drag to a court" hand icon and can be dropped
+  on any open court to start the match there.
+- **Winners stay, split, and get new partners; losers go back in line** —
+  matching the [format's own rules](http://www.aaacta.org/Drop_In/Format.html):
+  when a match finishes, the losing team returns to the plain waiting list,
+  while the winning team splits apart and drops into a pool earmarked to
+  return to that same court. The moment two new partners are available, that
+  pool auto-fills and sends itself straight back to the court — no manual
+  drag needed — so the court rarely goes idle and nobody keeps the same
+  partner twice in a row.
+- **Partner/opponent variety**: whenever a foursome is finalized, the engine
+  tries the 3 possible team splits and picks whichever minimizes repeat
   partners/opponents for that group, based on a running history.
 - **Server-out mode**: the moment 3 or fewer players are in the free pool,
   every active court (not just new ones) switches to Server-out. Since the
@@ -41,6 +49,10 @@ for resetting the board between Friday sessions.
   singles match on the lowest-numbered open court.
 - **Move a group**: any active court can relocate its whole match to another
   open court (useful if a court needs to be vacated).
+- **A player needs to leave mid-match**: tap their name and confirm "Remove
+  from play" — no auto-substitute. This leaves an open slot on the court:
+  drag a waiting/pooled player onto it to fill the gap, or drag the whole
+  short-handed match onto the waiting list (or a new pool) to break it up.
 - **Close a court**: marks a court unavailable (e.g. non-drop-in players are
   using it). Closed courts are invisible to the swap engine, singles
   assignment, and the move-to-another-court picker — everywhere the app

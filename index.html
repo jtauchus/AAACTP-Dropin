@@ -221,6 +221,10 @@
   .pool-card.ready{ border-color:var(--ball); }
   .pool-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .pool-count{ font-size:11px; color:var(--chalk-dim); }
+  .pool-target{
+    font-size:11px; font-weight:600; color:var(--ink); background:var(--ball);
+    padding:2px 9px; border-radius:20px;
+  }
   .chips-row{ display:flex; flex-wrap:wrap; gap:6px; }
   .chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
@@ -587,7 +591,7 @@ import {
     if (!court || court.status!=='playing') return;
     var members = court.teamA.concat(court.teamB);
     if (members.length===0) return;
-    state.pools.push({ id: uid('pool'), members: members });
+    state.pools.push({ id: uid('pool'), members: members, preferredCourtId: null });
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
     recompute();
     commit();
@@ -720,11 +724,23 @@ import {
         p.members.push(incoming);
       }
     });
+    // A winners' pool (see finishMatch) is earmarked to go straight back to
+    // the court it just won on, matching "winning team stays on court" —
+    // once it's full, send it there automatically instead of waiting for a
+    // drag, as long as that court hasn't been claimed by something else.
+    state.pools.slice().forEach(function(p){
+      if (p.members.length===4 && p.preferredCourtId!=null){
+        var court = state.courts.find(function(c){ return c.id===p.preferredCourtId; });
+        if (court && court.status==='idle'){
+          startPoolOnCourt(p.id, p.preferredCourtId);
+        }
+      }
+    });
     var free = sortedFreePool();
     while (free.length>=4){
       var chosen = free.splice(0,4);
       chosen.forEach(function(pid){ state.pool.splice(state.pool.indexOf(pid),1); });
-      state.pools.push({ id: uid('pool'), members: chosen });
+      state.pools.push({ id: uid('pool'), members: chosen, preferredCourtId: null });
     }
   }
 
@@ -758,7 +774,7 @@ import {
     var idx = state.pool.indexOf(playerId);
     if (idx===-1) return;
     state.pool.splice(idx,1);
-    state.pools.push({ id: uid('pool'), members:[playerId] });
+    state.pools.push({ id: uid('pool'), members:[playerId], preferredCourtId: null });
     recompute();
     commit();
   }
@@ -808,14 +824,25 @@ import {
     commit();
   }
 
+  // Matches the drop-in's own format: "Winning team stays on court... and
+  // splits — partners divide and play with new partners. Losing team
+  // stays (or moves down a court) and splits similarly." Losers rejoin the
+  // plain waiting line; winners split apart into a pool earmarked to return
+  // to this same court once it fills back up with two new partners.
   function finishMatch(courtId, winner){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
-    var allPlayers = court.teamA.concat(court.teamB);
-    allPlayers.forEach(function(pid){
+    var winningTeam = winner==='A' ? court.teamA : court.teamB;
+    var losingTeam = winner==='A' ? court.teamB : court.teamA;
+
+    losingTeam.forEach(function(pid){
       state.players[pid].waitSince = Date.now();
       state.pool.push(pid);
     });
+    if (winningTeam.length>0){
+      state.pools.push({ id: uid('pool'), members: winningTeam.slice(), preferredCourtId: courtId });
+    }
+
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
     recompute();
     commit();
@@ -1154,7 +1181,9 @@ import {
       var el = document.createElement('div');
       el.className = 'pool-card' + (ready ? ' ready' : '');
       el.setAttribute('data-pool', p.id);
-      var html = '<div class="pool-top"><span class="pool-count">'+p.members.length+'/4</span></div>';
+      var html = '<div class="pool-top"><span class="pool-count">'+p.members.length+'/4</span>' +
+        (p.preferredCourtId!=null ? '<span class="pool-target">→ Court '+p.preferredCourtId+'</span>' : '') +
+        '</div>';
       html += '<div class="chips-row">';
       p.members.forEach(function(pid){
         html += '<span class="chip" data-pool="'+p.id+'" data-player="'+pid+'">'+nm(pid)+' <span class="x">✕</span></span>';
