@@ -20,6 +20,9 @@
     --court-blue:#5b9bd0;
     --alert:#e8b33d;
     --danger:#c1755a;
+    --go:#5c9d5c;
+    --bg-red:#8b3226;
+    --bg-green:#1f7a46;
     --radius:10px;
   }
   *{box-sizing:border-box;}
@@ -32,7 +35,11 @@
     overscroll-behavior:none;
     user-select:none;
     -webkit-user-select:none;
+    transition:background-color .3s ease;
   }
+  /* Whole-page mode color — visible from across the room, not just up close. */
+  body.mode-red{ background:var(--bg-red); }
+  body.mode-green{ background:var(--bg-green); }
   .num, h1, h2, h3, .court-id, .score-btn, .accept-btn{
     font-family:'Oswald',ui-sans-serif,system-ui,sans-serif;
   }
@@ -70,6 +77,8 @@
     transition:opacity .25s ease, max-height .25s ease, padding .25s ease;
   }
   .banner.show{ opacity:1; max-height:44px; }
+  .banner.mode-red{ background:var(--danger); }
+  .banner.mode-green{ background:var(--go); }
   .banner .dot{ width:7px; height:7px; border-radius:50%; background:var(--ink); flex-shrink:0; }
   .head-actions{ display:flex; gap:10px; align-items:center; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; order:2; margin-left:auto; }
   .headcount{
@@ -246,6 +255,7 @@
   }
   .pool-hand:active{ cursor:grabbing; }
   .pool-hand.drag-source{ opacity:0.35; }
+  .pool-hand-singles{ background:var(--ball-dim); }
   .pool-new-placeholder{
     border:1px dashed var(--line); border-radius:var(--radius); padding:14px;
     text-align:center; font-size:12px; color:var(--chalk-dim); margin-bottom:10px;
@@ -377,7 +387,6 @@
           <button class="btn primary singles-btn" id="startSinglesBtn" style="display:none;">Start singles match</button>
         </div>
       </div>
-      <button class="btn ghost" id="demoBtn" style="margin-top:10px;">Simulate 3 courts finishing</button>
     </div>
   </main>
 </div>
@@ -494,11 +503,21 @@ import {
     return n;
   }
 
-  function lowPoolActive(){ return state.pool.length <= 3; }
+  // Everyone not currently on a court: waiting, plus anyone already sitting
+  // in a swap-pool group. Any even number of these can always be split into
+  // complete doubles (4s) and/or singles (2s) matches with nobody left over;
+  // an odd number always leaves exactly one person short, so server-out
+  // (courts self-rotate players) is the only way to keep everyone moving.
+  function offCourtCount(){
+    var n = state.pool.length;
+    state.pools.forEach(function(p){ n += p.members.length; });
+    return n;
+  }
+  function serveOutActive(){ return offCourtCount() % 2 !== 0; }
   function anyCourtPlaying(){ return state.courts.some(function(c){ return c.status==='playing'; }); }
   function effectiveCourtMode(court){
     if (court.mode==='singles') return 'singles';
-    if (lowPoolActive() && court.status==='playing') return 'server-out';
+    if (serveOutActive() && court.status==='playing') return 'server-out';
     return court.mode;
   }
   function rotateOutPlayer(courtId, playerId){
@@ -549,6 +568,8 @@ import {
   }
 
   // Drag a waiting/pool player onto a specific empty court slot to fill it.
+  // No recompute() here — a manual drag should do exactly what was dragged,
+  // not also auto-fill or auto-form other pools as a side effect.
   function fillCourtSlot(courtId, teamKey, incomingPlayerId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -563,7 +584,6 @@ import {
       movePlayerOutOfPool(srcPool.id, incomingPlayerId);
     }
     court[teamKey].push(incomingPlayerId);
-    recompute();
     commit();
   }
 
@@ -594,7 +614,9 @@ import {
   }
 
   // Drag a waiting/pool player onto a specific court player to swap them into
-  // a live match. The bumped player goes back to the waiting list.
+  // a live match. The bumped player goes back to the waiting list. No
+  // recompute() — this is a deliberate one-for-one swap, not an invitation
+  // for the auto-engine to also rearrange other pools.
   function swapCourtPlayer(courtId, targetPlayerId, incomingPlayerId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -616,7 +638,6 @@ import {
     }
     state.players[targetPlayerId].waitSince = Date.now();
     state.pool.push(targetPlayerId);
-    recompute();
     commit();
   }
 
@@ -756,6 +777,9 @@ import {
     return p;
   }
 
+  // Both of these are one drag = one player added, full stop. No recompute()
+  // — the pool grows exactly as fast as someone drags people into it, and
+  // only counts as ready once a human has actually put 4 people there.
   function addToPool(poolId, playerId){
     var p = state.pools.find(function(pp){ return pp.id===poolId; });
     if (!p || p.members.length>=4) return;
@@ -763,7 +787,6 @@ import {
     if (idx===-1) return;
     state.pool.splice(idx,1);
     p.members.push(playerId);
-    recompute();
     commit();
   }
 
@@ -772,7 +795,6 @@ import {
     if (idx===-1) return;
     state.pool.splice(idx,1);
     state.pools.push({ id: uid('pool'), members:[playerId], preferredCourtId: null });
-    recompute();
     commit();
   }
 
@@ -808,14 +830,24 @@ import {
   }
 
   // Drag a ready (4-player) pool onto an open court to start the match there.
+  // A pool of 4 starts doubles; a pool of exactly 2 starts singles — same
+  // drag-to-a-court gesture either way, decided by however many are in it
+  // at the moment it's dropped.
   function startPoolOnCourt(poolId, courtId){
     var p = state.pools.find(function(pp){ return pp.id===poolId; });
     var court = state.courts.find(function(c){ return c.id===courtId; });
-    if (!p || p.members.length!==4 || !court || court.status!=='idle') return;
-    var partition = pickBestPartition(p.members);
-    court.status = 'playing'; court.mode = 'doubles';
-    court.teamA = partition.teamA; court.teamB = partition.teamB;
-    bumpHistoryForMatch(partition.teamA, partition.teamB);
+    if (!p || !court || court.status!=='idle') return;
+    if (p.members.length===4){
+      var partition = pickBestPartition(p.members);
+      court.status = 'playing'; court.mode = 'doubles';
+      court.teamA = partition.teamA; court.teamB = partition.teamB;
+      bumpHistoryForMatch(partition.teamA, partition.teamB);
+    } else if (p.members.length===2){
+      court.status = 'playing'; court.mode = 'singles';
+      court.teamA = [p.members[0]]; court.teamB = [p.members[1]];
+    } else {
+      return;
+    }
     p.members.forEach(function(pid){ state.players[pid].gamesPlayed++; });
     state.pools = state.pools.filter(function(pp){ return pp.id!==poolId; });
     commit();
@@ -860,12 +892,6 @@ import {
     if (selIdx>-1) localUi.selectedForSingles.splice(selIdx,1);
     delete state.players[playerId];
     commit();
-  }
-
-  function simulateBusyStretch(){
-    var playing = state.courts.filter(function(c){ return c.status==='playing'; });
-    var picks = playing.sort(function(){ return Math.random()-0.5; }).slice(0,3);
-    picks.forEach(function(c){ finishMatch(c.id, 'A'); });
   }
 
   // ---------- Drag & drop: waiting <-> swap pool <-> courts ----------
@@ -1020,13 +1046,22 @@ import {
     document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
     document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
     var banner = document.getElementById('banner');
-    var msg = (state.sessionStarted && lowPoolActive() && anyCourtPlaying()) ? "3 or fewer waiting — every court is running Server-Out to keep games moving" : '';
-    if (msg){
-      banner.classList.add('show');
-      document.getElementById('bannerText').textContent = msg;
-    } else {
+    if (!state.sessionStarted){
       banner.classList.remove('show');
+      document.body.classList.remove('mode-red','mode-green');
+      return;
     }
+    var uneven = serveOutActive();
+    banner.classList.add('show');
+    banner.classList.toggle('mode-red', uneven);
+    banner.classList.toggle('mode-green', !uneven);
+    // The whole background changes too — a banner alone can't be seen from
+    // the far courts, but the color of the whole iPad can.
+    document.body.classList.toggle('mode-red', uneven);
+    document.body.classList.toggle('mode-green', !uneven);
+    document.getElementById('bannerText').textContent = uneven
+      ? 'Odd numbers off court — Server-Out mode: courts rotate players to keep everyone moving.'
+      : 'Even numbers off court — normal play: everyone can be on a doubles or singles court.';
   }
 
   function renderSignupList(){
@@ -1174,9 +1209,10 @@ import {
     list.innerHTML = '';
 
     state.pools.forEach(function(p){
-      var ready = p.members.length===4;
+      var readyDoubles = p.members.length===4;
+      var readySingles = p.members.length===2;
       var el = document.createElement('div');
-      el.className = 'pool-card' + (ready ? ' ready' : '');
+      el.className = 'pool-card' + (readyDoubles || readySingles ? ' ready' : '');
       el.setAttribute('data-pool', p.id);
       var html = '<div class="pool-top"><span class="pool-count">'+p.members.length+'/4</span>' +
         (p.preferredCourtId!=null ? '<span class="pool-target">→ Court '+p.preferredCourtId+'</span>' : '') +
@@ -1189,8 +1225,10 @@ import {
         html += '<span class="pool-slot-empty">drop here</span>';
       }
       html += '</div>';
-      if (ready){
+      if (readyDoubles){
         html += '<div class="pool-hand" data-pool-handle="'+p.id+'">✋ Ready — drag to a court</div>';
+      } else if (readySingles){
+        html += '<div class="pool-hand pool-hand-singles" data-pool-handle="'+p.id+'">✋ Ready for singles — drag to a court</div>';
       }
       el.innerHTML = html;
       list.appendChild(el);
@@ -1324,7 +1362,6 @@ import {
       closeModal();
     }
   });
-  document.getElementById('demoBtn').addEventListener('click', simulateBusyStretch);
   document.getElementById('startSinglesBtn').addEventListener('click', startSingles);
   document.getElementById('startSessionBtn').addEventListener('click', startSession);
 
