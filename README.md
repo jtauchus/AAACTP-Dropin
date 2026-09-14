@@ -8,10 +8,13 @@ Format reference: http://www.aaacta.org/Drop_In/Format.html
 
 ## Status
 
-`index.html` is a self-contained, in-memory prototype (no backend) built to
-validate the mechanics. It resets on page refresh. Everything below describes
-what it currently does — the next step is wiring it to a real-time backend so
-multiple phones and the board stay in sync.
+`index.html` is backed by a shared Firestore document (`boards/friday`), so the
+board and everyone's phones stay in sync in real time — check someone in on a
+phone and it shows up on the iPad instantly, and vice versa. Per-device UI
+state (which court you're mid-move on, which two names you've tapped for
+singles) stays local and never syncs, so one device's in-progress action
+doesn't leak onto another's screen. `admin.html` is a separate, unlinked page
+for resetting the board between Friday sessions.
 
 ## Core mechanics
 
@@ -45,17 +48,20 @@ multiple phones and the board stay in sync.
 
 ## Suggested next steps
 
-1. **Pick a realtime backend** (Firebase or Supabase are the easiest fits) so
-   the board and every phone share one live state instead of the in-memory
-   `state` object in `index.html`.
-2. **Split the single file** into a small app (state/engine logic, rendering,
-   and the two entry points: the board view and a lightweight phone view)
-   once it's backed by a real data store.
-3. **QR check-in**: point the QR code at a real check-in form/page instead of
+1. **Split the single file** into a small app (state/engine logic, rendering,
+   and the two entry points: the board view and a lightweight phone view).
+2. **QR check-in**: point the QR code at a real check-in form/page instead of
    the current placeholder graphic + modal.
-4. **iPad kiosk setup**: Guided Access, Auto-Lock off, "Add to Home Screen"
+3. **iPad kiosk setup**: Guided Access, Auto-Lock off, "Add to Home Screen"
    for a full-screen PWA — see prior discussion for details.
+4. **Tighten Firestore access**: the security rules currently allow anyone to
+   read/write (`allow read, write: if true`) since there's no login system —
+   fine for a casual club app with nothing sensitive in it, but worth
+   revisiting if that ever changes.
 
 ## Files
 
-- `index.html` — the working prototype described above.
+- `index.html` — the live board (courts, swap pool, waiting list, sign-ups).
+- `admin.html` — admin-only page to reset the board for next Friday. Not
+  linked from `index.html` on purpose; bookmark it directly.
+- `firebase-init.js` — shared Firebase/Firestore setup used by both pages.

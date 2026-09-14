@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drop-In Board — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#122019;
+    --panel:#1b2b21;
+    --panel-2:#223327;
+    --panel-3:#28392d;
+    --line:#3c5041;
+    --chalk:#edeae2;
+    --chalk-dim:#a7b6a8;
+    --ball:#d7e14a;
+    --danger:#c1755a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:var(--ink); color:var(--chalk);
+    font-family:'Inter',ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Oswald',ui-sans-serif,system-ui,sans-serif; }
+  .wrap{ max-width:560px; margin:0 auto; padding:28px 20px 60px; }
+  header{ margin-bottom:22px; }
+  header h1{ margin:0 0 4px; font-size:22px; font-weight:600; }
+  header .sub{ font-size:12.5px; color:var(--chalk-dim); }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; margin-bottom:18px;
+  }
+  .card h2{ margin:0 0 12px; font-size:15px; font-weight:600; }
+  .stat-row{ display:flex; justify-content:space-between; padding:7px 0; font-size:13.5px; border-bottom:1px solid var(--line); }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-row .label{ color:var(--chalk-dim); }
+  .stat-row .value{ font-weight:600; color:var(--ball); }
+  .mode-pill{
+    display:inline-block; font-size:11px; font-weight:600; color:var(--ink);
+    background:var(--ball); padding:3px 10px; border-radius:20px;
+  }
+  .mode-pill.presession{ background:var(--panel-3); color:var(--chalk-dim); }
+  p{ font-size:13px; color:var(--chalk-dim); line-height:1.6; }
+  .btn{
+    border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
+    padding:12px 18px; border-radius:8px; font-size:14px; font-weight:600;
+    cursor:pointer; width:100%; font-family:inherit;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn.danger{ background:var(--danger); color:var(--ink); border-color:var(--danger); }
+  .btn.ghost{ background:transparent; color:var(--chalk-dim); }
+  .actions{ display:flex; gap:10px; margin-top:12px; }
+  .actions .btn{ flex:1; }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(10,15,12,0.65);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+    padding:22px; width:min(400px, 100%);
+  }
+  .modal h3{ margin:0 0 8px; font-size:17px; }
+  .modal p{ margin:0 0 16px; }
+  .loading-text{ color:var(--chalk-dim); font-size:13px; }
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--ball); color:var(--ink); font-weight:600; font-size:13px;
+    padding:10px 18px; border-radius:8px; opacity:0; pointer-events:none;
+    transition:opacity .2s ease;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Friday Drop-In — Admin</h1>
+    <div class="sub">Not linked from the board on purpose — bookmark this page.</div>
+  </header>
+
+  <div class="card">
+    <h2>Tonight's board</h2>
+    <div id="modePill" class="mode-pill presession">Loading…</div>
+    <div style="margin-top:14px;">
+      <div class="stat-row"><span class="label">Signed up / checked in</span><span class="value" id="statTotal">—</span></div>
+      <div class="stat-row"><span class="label">Waiting to play</span><span class="value" id="statWaiting">—</span></div>
+      <div class="stat-row"><span class="label">In swap-pool groups</span><span class="value" id="statPools">—</span></div>
+      <div class="stat-row"><span class="label">Courts in play</span><span class="value" id="statPlaying">—</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reset for next Friday</h2>
+    <p>Clears every player, court, and swap-pool group, and wipes the partner/opponent
+       history. The board goes back to sign-up mode so people can start adding their
+       names for next week. This cannot be undone.</p>
+    <button class="btn danger" id="resetBtn">Reset for next Friday</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="confirmBackdrop">
+  <div class="modal">
+    <h3>Reset tonight's board?</h3>
+    <p id="confirmDetail">This will remove everyone currently checked in and clear all
+       match history. Next Friday's sign-up list starts empty.</p>
+    <div class="actions">
+      <button class="btn ghost" id="confirmCancel">Cancel</button>
+      <button class="btn danger" id="confirmReset">Yes, reset it</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Board reset for next Friday.</div>
+
+<script type="module">
+import { db, freshBoardState } from './firebase-init.js';
+import {
+  doc, onSnapshot, setDoc
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+var stateDocRef = doc(db, 'boards', 'friday');
+var latestState = null;
+
+function renderStats(){
+  var modePill = document.getElementById('modePill');
+  if (!latestState){
+    modePill.textContent = 'Loading…';
+    modePill.className = 'mode-pill presession';
+    return;
+  }
+  var started = !!latestState.sessionStarted;
+  modePill.textContent = started ? 'Live — session in progress' : 'Sign-ups open (pre-session)';
+  modePill.className = 'mode-pill' + (started ? '' : ' presession');
+
+  var waiting = (latestState.pool || []).length;
+  var pooled = (latestState.pools || []).reduce(function(n,p){ return n + p.members.length; }, 0);
+  var playing = 0, courtsPlaying = 0;
+  (latestState.courts || []).forEach(function(c){
+    if (c.status==='playing'){ courtsPlaying++; playing += c.teamA.length + c.teamB.length; }
+  });
+  var total = waiting + pooled + playing;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statWaiting').textContent = waiting;
+  document.getElementById('statPools').textContent = pooled;
+  document.getElementById('statPlaying').textContent = courtsPlaying;
+}
+
+onSnapshot(stateDocRef, function(snap){
+  latestState = snap.exists() ? snap.data() : freshBoardState();
+  renderStats();
+}, function(err){
+  console.error('Admin sync error:', err);
+});
+
+var confirmBackdrop = document.getElementById('confirmBackdrop');
+document.getElementById('resetBtn').addEventListener('click', function(){
+  confirmBackdrop.classList.add('show');
+});
+document.getElementById('confirmCancel').addEventListener('click', function(){
+  confirmBackdrop.classList.remove('show');
+});
+document.getElementById('confirmReset').addEventListener('click', function(){
+  confirmBackdrop.classList.remove('show');
+  setDoc(stateDocRef, freshBoardState()).then(function(){
+    var toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(function(){ toast.classList.remove('show'); }, 3000);
+  }).catch(function(err){
+    console.error('Failed to reset board:', err);
+    alert("Couldn't reset the board — check your connection and try again.");
+  });
+});
+</script>
+</body>
+</html>
