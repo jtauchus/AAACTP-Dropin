@@ -41,6 +41,14 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
 - **Partner/opponent variety**: whenever a foursome is finalized, the engine
   tries the 3 possible team splits and picks whichever minimizes repeat
   partners/opponents for that group, based on a running history.
+- **Winners vs. winners, losers vs. losers**: a just-finished match's winner
+  pair and loser pair each show up as their own tagged 2-person pool. If
+  another court finishes around the same time, a "⚡ Combine with other
+  winners/losers" button appears on both pools of the same kind, letting the
+  operator merge them straight into a new match (teams re-picked the same
+  way as any other foursome) instead of waiting for the general waiting
+  list. Each pool still tops up from the waiting list as usual if no other
+  same-kind pool is available to combine with.
 - **Server-out mode**: the moment 3 or fewer players are in the free pool,
   every active court (not just new ones) switches to Server-out. Since the
   app can't track whose serve it actually is, every on-court player gets

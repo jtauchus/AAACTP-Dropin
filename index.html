@@ -236,6 +236,12 @@
     font-size:11px; font-weight:600; color:var(--ink); background:var(--ball);
     padding:2px 9px; border-radius:20px;
   }
+  .pool-kind{
+    font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-right:6px;
+  }
+  .pool-kind-winner{ background:var(--ball); color:var(--ink); }
+  .pool-kind-loser{ background:var(--panel-3); color:var(--chalk-dim); border:1px solid var(--line); }
+  .combine-btn{ width:100%; margin-top:9px; font-size:12.5px; padding:8px; }
   .chips-row{ display:flex; flex-wrap:wrap; gap:6px; }
   .chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
@@ -1001,11 +1007,51 @@ import {
     }
   }
 
+  // The other same-kind, still-forming pool this one could combine with —
+  // if several exist, the oldest one (array order already reflects when
+  // each was created). Only offered while combining wouldn't overflow 4.
+  function findCombinablePartner(pool){
+    if (!pool.kind || pool.members.length>=4) return null;
+    return state.pools.find(function(p){
+      return p.id!==pool.id && p.kind===pool.kind &&
+        p.members.length<4 && p.members.length+pool.members.length<=4;
+    }) || null;
+  }
+
+  // "Winners play winners, losers play losers": once two same-kind pools
+  // from different finished courts are both still short of 4, let the
+  // operator merge them into one match instead of waiting for the general
+  // waiting list to trickle in (which may never happen if it's a slow
+  // stretch). Reuses applyStartPoolOnCourt's own team-picking, so partners
+  // still get chosen to minimize repeats, same as any other 4-person pool.
+  function combinePools(poolIdA, poolIdB){
+    var a = state.pools.find(function(p){ return p.id===poolIdA; });
+    var b = state.pools.find(function(p){ return p.id===poolIdB; });
+    if (!a || !b || a===b) return;
+    if (!a.kind || a.kind!==b.kind) return;
+    if (a.members.length+b.members.length>4) return;
+    var before = deepClone(state);
+    var label = 'Combined two ' + (a.kind==='winner' ? 'winner' : 'loser') + ' groups into a match';
+    a.members = a.members.concat(b.members);
+    a.preferredCourtId = null;
+    state.pools = state.pools.filter(function(p){ return p.id!==b.id; });
+    if (a.members.length===4){
+      var court = lowestIdleCourt();
+      if (court) applyStartPoolOnCourt(a.id, court.id);
+    }
+    commit(label, before);
+  }
+
   // Matches the drop-in's own format: "Winning team stays on court... and
   // splits — partners divide and play with new partners. Losing team
   // stays (or moves down a court) and splits similarly." Losers rejoin the
-  // plain waiting line; winners split apart into a pool earmarked to return
-  // to this same court once it fills back up with two new partners.
+  // waiting line via their own 2-person "loser" pool (same top-up/drag
+  // rules as any other pool); winners split apart into a "winner" pool
+  // earmarked to return to this same court once it fills back up with two
+  // new partners. Tagging both by kind lets the operator combine two
+  // same-kind pools from different courts (winners vs winners, losers vs
+  // losers) via combinePools() instead of waiting on the general waiting
+  // list, without changing the default top-up behavior for either.
   function finishMatch(courtId, winner){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -1013,12 +1059,12 @@ import {
     var winningTeam = winner==='A' ? court.teamA : court.teamB;
     var losingTeam = winner==='A' ? court.teamB : court.teamA;
 
-    losingTeam.forEach(function(pid){
-      state.players[pid].waitSince = Date.now();
-      state.pool.push(pid);
-    });
+    losingTeam.forEach(function(pid){ state.players[pid].waitSince = Date.now(); });
+    if (losingTeam.length>0){
+      state.pools.push({ id: uid('pool'), members: losingTeam.slice(), preferredCourtId: null, kind: 'loser' });
+    }
     if (winningTeam.length>0){
-      state.pools.push({ id: uid('pool'), members: winningTeam.slice(), preferredCourtId: courtId });
+      state.pools.push({ id: uid('pool'), members: winningTeam.slice(), preferredCourtId: courtId, kind: 'winner' });
     }
 
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
@@ -1384,7 +1430,10 @@ import {
       var el = document.createElement('div');
       el.className = 'pool-card' + (readyDoubles || readySingles ? ' ready' : '');
       el.setAttribute('data-pool', p.id);
+      var kindBadge = p.kind==='winner' ? '<span class="pool-kind pool-kind-winner">Winners</span>'
+        : p.kind==='loser' ? '<span class="pool-kind pool-kind-loser">Losers</span>' : '';
       var html = '<div class="pool-top"><span class="pool-count">'+p.members.length+'/4</span>' +
+        kindBadge +
         (p.preferredCourtId!=null ? '<span class="pool-target">→ Court '+p.preferredCourtId+'</span>' : '') +
         '</div>';
       html += '<div class="chips-row">';
@@ -1399,6 +1448,10 @@ import {
         html += '<div class="pool-hand" data-pool-handle="'+p.id+'">✋ Ready — drag to a court</div>';
       } else if (readySingles){
         html += '<div class="pool-hand pool-hand-singles" data-pool-handle="'+p.id+'">✋ Ready for singles — drag to a court</div>';
+      }
+      var partner = findCombinablePartner(p);
+      if (partner){
+        html += '<button class="btn primary combine-btn" data-combine-a="'+p.id+'" data-combine-b="'+partner.id+'">⚡ Combine with other '+(p.kind==='winner'?'winners':'losers')+'</button>';
       }
       el.innerHTML = html;
       list.appendChild(el);
@@ -1423,6 +1476,11 @@ import {
     list.querySelectorAll('[data-pool-handle]').forEach(function(handle){
       handle.addEventListener('pointerdown', function(e){
         startDrag(e, { type:'pool-ready', poolId: handle.getAttribute('data-pool-handle') });
+      });
+    });
+    list.querySelectorAll('[data-combine-a]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        combinePools(btn.getAttribute('data-combine-a'), btn.getAttribute('data-combine-b'));
       });
     });
   }
