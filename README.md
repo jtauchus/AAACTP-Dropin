@@ -79,11 +79,9 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
 
 1. **Split the single file** into a small app (state/engine logic, rendering,
    and the two entry points: the board view and a lightweight phone view).
-2. **QR check-in**: point the QR code at a real check-in form/page instead of
-   the current placeholder graphic + modal.
-3. **iPad kiosk setup**: Guided Access, Auto-Lock off, "Add to Home Screen"
+2. **iPad kiosk setup**: Guided Access, Auto-Lock off, "Add to Home Screen"
    for a full-screen PWA — see prior discussion for details.
-4. **Tighten Firestore access**: the security rules currently allow anyone to
+3. **Tighten Firestore access**: the security rules currently allow anyone to
    read/write (`allow read, write: if true`) since there's no login system —
    fine for a casual club app with nothing sensitive in it, but worth
    revisiting if that ever changes.

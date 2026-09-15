@@ -98,20 +98,6 @@
   .btn.danger{ background:var(--danger); color:var(--ink); border-color:var(--danger); font-weight:700; }
   .btn:disabled{ opacity:.35; cursor:default; }
   .icon-btn{ padding:8px 11px; font-size:15px; line-height:1; }
-  .qr-tile{
-    display:flex; align-items:center; gap:8px;
-    border:1px solid var(--line); background:var(--panel-3);
-    padding:6px 10px 6px 6px; border-radius:8px;
-  }
-  .qr-grid{
-    width:34px; height:34px; border-radius:4px; overflow:hidden;
-    display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(6,1fr);
-    background:var(--chalk); flex-shrink:0;
-  }
-  .qr-grid div{ background:transparent; }
-  .qr-grid div.on{ background:var(--ink); }
-  .qr-label{ font-size:11px; line-height:1.25; color:var(--chalk-dim); }
-  .qr-label b{ display:block; color:var(--chalk); font-size:12px; }
 
   /* ---------- Main layout ---------- */
   main{
@@ -396,10 +382,6 @@
       <button class="btn ghost icon-btn" id="undoBtn" title="Nothing to undo" disabled>↶</button>
       <button class="btn ghost icon-btn" id="redoBtn" title="Nothing to redo" disabled>↷</button>
       <button class="btn ghost icon-btn" id="historyBtn" title="Change history">🕘</button>
-      <div class="qr-tile" id="qrTile">
-        <div class="qr-grid" id="qrGrid"></div>
-        <div class="qr-label"><b>Self check-in</b>scan or tap</div>
-      </div>
       <button class="btn primary" id="addPlayerBtn">+ Add Me</button>
     </div>
   </header>
@@ -1614,18 +1596,6 @@ import {
     renderFreeAgents();
   }
 
-  // ---------- QR faux pattern ----------
-  function buildQr(){
-    var grid = document.getElementById('qrGrid');
-    var pattern = [1,0,1,1,0,1, 0,1,0,0,1,0, 1,1,1,0,1,1, 0,0,1,1,0,0, 1,0,0,1,1,0, 0,1,1,0,0,1];
-    grid.innerHTML = '';
-    pattern.forEach(function(v){
-      var d = document.createElement('div');
-      if (v) d.className='on';
-      grid.appendChild(d);
-    });
-  }
-
   // ---------- Modal wiring ----------
   var backdrop = document.getElementById('modalBackdrop');
   var nameInput = document.getElementById('nameInput');
@@ -1638,7 +1608,6 @@ import {
   }
   function closeModal(){ backdrop.classList.remove('show'); }
   document.getElementById('addPlayerBtn').addEventListener('click', openModal);
-  document.getElementById('qrTile').addEventListener('click', openModal);
   document.getElementById('cancelAdd').addEventListener('click', closeModal);
   document.getElementById('confirmAdd').addEventListener('click', function(){
     addPlayer(nameInput.value.trim());
@@ -1704,8 +1673,6 @@ import {
   });
 
   // ---------- Init ----------
-  buildQr();
-
   // The single source of truth is Firestore, not this device's own memory.
   // Every snapshot — whether it's this device's own write echoing back or
   // another device's change — replaces `state` wholesale and re-renders.
