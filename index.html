@@ -121,7 +121,12 @@
     overflow:hidden;
   }
   @media (max-width: 880px){
-    main{ grid-template-columns:1fr; overflow:auto; }
+    /* Stacked single column now scrolls instead of fitting one viewport-
+       height screen, so the two sections should size to their own
+       content (align-content:start) instead of grid's default stretch-
+       to-fill-container behavior, which was otherwise inflating whichever
+       section was shorter into a big block of empty space. */
+    main{ grid-template-columns:1fr; overflow:auto; align-content:start; }
     .pool-wrap{ min-height:auto; overflow:visible; }
     .pool-scroll{ flex:none; overflow-y:visible; }
   }
@@ -142,7 +147,14 @@
     gap:12px; flex:1; min-height:0;
   }
   @media (max-width: 880px){
-    .courts-grid{ grid-template-columns:repeat(2,1fr); grid-template-rows:none; }
+    /* On mobile, main scrolls (see the earlier 880px query) instead of
+       fitting everything in one viewport-height screen, so the courts
+       area needs its own real height instead of the desktop flex:1 /
+       min-height:0 pair — those collapse to ~0 once the grid parent no
+       longer has a definite height to fill, clipping every court's
+       content down to just its badge. */
+    .courts-wrap{ min-height:auto; }
+    .courts-grid{ grid-template-columns:repeat(2,1fr); grid-template-rows:none; flex:none; min-height:auto; }
   }
   .court{
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
@@ -152,6 +164,9 @@
   .court.idle{ background:repeating-linear-gradient(135deg, var(--panel), var(--panel) 10px, var(--panel-2) 10px, var(--panel-2) 20px); }
   .court.closed{ background:var(--ink); opacity:0.6; }
   .court.drop-hover{ outline:2px dashed var(--ball); outline-offset:2px; }
+  @media (max-width: 880px){
+    .court{ overflow:visible; min-height:auto; }
+  }
   .court-top{ display:flex; align-items:center; justify-content:space-between; }
   .court-id{ font-size:20px; font-weight:600; color:var(--chalk); }
   .mode-badge{
