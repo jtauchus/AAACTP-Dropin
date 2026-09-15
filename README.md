@@ -79,13 +79,45 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
 
+## iPad kiosk mode
+
+One-time setup on the board iPad:
+
+1. **Auto-Lock off** — Settings → Display & Brightness → Auto-Lock → Never,
+   so the screen doesn't sleep mid-session.
+2. **Add the board to the Home Screen** — in Safari, open the live board
+   (the "Live board QR" link in the header scans to this same URL), tap the
+   Share icon → **Add to Home Screen** → name it "Friday Drop-In". Both
+   `index.html` and `admin.html` carry the Safari meta tags that make this
+   open full-screen with no address bar/tabs, like a real app — launch it
+   from this new icon, not from Safari, to get that. Repeat for `admin.html`
+   if you want a one-tap admin icon too (it's not linked from the board on
+   purpose, so this is the easiest way to reach it from the iPad itself).
+3. **Enable Guided Access** — Settings → Accessibility → Guided Access → on.
+   Under **Passcode Settings**, turn on Face ID/Touch ID so you don't have to
+   type a passcode every time you start or stop it.
+
+Each Friday:
+
+- Launch the **Friday Drop-In** home-screen icon (not Safari).
+- **Start kiosk lock**: triple-click the side button → **Start** (top
+  right). The iPad is now locked to the board — no accidental swipes to the
+  home screen, no one backing out to Safari or another app.
+- **Switch out quickly** (weekly reset, bulk-adding regulars, or just
+  handing the iPad off for something else): triple-click again → Face
+  ID/passcode → **End** (top left). You're back to normal iPad use — open
+  the **Drop-In Admin** icon if you made one, do what you need, then
+  relaunch **Friday Drop-In** and Start Guided Access again. The whole
+  round trip is a few seconds.
+- In practice this is rarely needed mid-session: the ↶/↷ undo/redo buttons
+  and the 🕘 history panel (see above) fix most mis-clicks right from the
+  board itself, without ever leaving kiosk mode.
+
 ## Suggested next steps
 
 1. **Split the single file** into a small app (state/engine logic, rendering,
    and the two entry points: the board view and a lightweight phone view).
-2. **iPad kiosk setup**: Guided Access, Auto-Lock off, "Add to Home Screen"
-   for a full-screen PWA — see prior discussion for details.
-3. **Tighten Firestore access**: the security rules currently allow anyone to
+2. **Tighten Firestore access**: the security rules currently allow anyone to
    read/write (`allow read, write: if true`) since there's no login system —
    fine for a casual club app with nothing sensitive in it, but worth
    revisiting if that ever changes.
