@@ -121,12 +121,21 @@
     overflow:hidden;
   }
   @media (max-width: 880px){
-    /* Stacked single column now scrolls instead of fitting one viewport-
-       height screen, so the two sections should size to their own
-       content (align-content:start) instead of grid's default stretch-
-       to-fill-container behavior, which was otherwise inflating whichever
-       section was shorter into a big block of empty space. */
-    main{ grid-template-columns:1fr; overflow:auto; align-content:start; }
+    /* A fixed-height app shell with one internally-scrolling region
+       (main{overflow:auto}) turned out unreliable for touch: this page
+       is full of pointer-based drag handles (touch-action:none chips,
+       pool hands, court-regroup handles) needed for drag-and-drop, and
+       a finger swipe that starts anywhere near one of them competes with
+       main's own scroll instead of just scrolling past it — in practice
+       only "dead" gaps between cards reliably scrolled. Letting the whole
+       page grow to its content and scroll natively (the one gesture every
+       mobile browser gets right everywhere except the deliberate drag
+       handles) avoids that fight entirely. align-content:start stops
+       grid's default stretch from inflating whichever section (courts vs
+       swap pool) is shorter into a block of empty space now that they no
+       longer share one fixed-height screen. */
+    #app{ height:auto; min-height:100vh; }
+    main{ flex:none; grid-template-columns:1fr; overflow:visible; align-content:start; }
     .pool-wrap{ min-height:auto; overflow:visible; }
     .pool-scroll{ flex:none; overflow-y:visible; }
   }
@@ -348,6 +357,9 @@
     flex:1; min-height:0; overflow:auto;
     padding:24px 20px 32px; display:flex; flex-direction:column; gap:20px;
     max-width:640px; margin:0 auto; width:100%;
+  }
+  @media (max-width: 880px){
+    .presession-panel{ flex:none; overflow:visible; }
   }
   .presession-card{
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
