@@ -74,6 +74,10 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   to the last 15 actions.
 - **Session date**: shown at the top of the board (defaults to today);
   set it ahead of time from `admin.html` when prepping a specific Friday.
+- **QR links**: two buttons under the header ("WhatsApp group QR" / "Live
+  board QR") pop up a scannable QR code (generated via api.qrserver.com)
+  for the club's WhatsApp invite link and for this board's own URL, each
+  with a Close button.
 
 ## Suggested next steps
 

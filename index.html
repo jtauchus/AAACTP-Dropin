@@ -326,6 +326,18 @@
   .history-time{ color:var(--chalk-dim); font-size:11.5px; margin-top:2px; }
   .history-restore{ width:auto; padding:6px 12px; font-size:12px; flex-shrink:0; }
 
+  /* ---------- QR links row (own row, separate from .head-actions) ---------- */
+  .qr-links{
+    order:4; flex:1 1 100%; min-width:0;
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .qr-link-btn{ font-size:12px; }
+  .qr-modal-image{ display:flex; justify-content:center; margin-bottom:12px; }
+  .qr-modal-image img{
+    width:220px; height:220px; border-radius:8px; background:#fff; padding:10px; display:block;
+  }
+  .qr-modal-url{ word-break:break-all; text-align:center; }
+
   ::-webkit-scrollbar{ width:6px; }
   ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
 
@@ -383,6 +395,10 @@
       <button class="btn ghost icon-btn" id="redoBtn" title="Nothing to redo" disabled>↷</button>
       <button class="btn ghost icon-btn" id="historyBtn" title="Change history">🕘</button>
       <button class="btn primary" id="addPlayerBtn">+ Add Me</button>
+    </div>
+    <div class="qr-links">
+      <button class="btn ghost qr-link-btn" id="whatsappQrBtn">💬 WhatsApp group QR</button>
+      <button class="btn ghost qr-link-btn" id="liveBoardQrBtn">🎾 Live board QR</button>
     </div>
   </header>
 
@@ -452,6 +468,17 @@
     <div id="historyList"></div>
     <div class="modal-actions" style="margin-top:14px;">
       <button class="btn ghost" id="historyCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="qrBackdrop">
+  <div class="modal">
+    <h3 id="qrModalTitle">Scan to join</h3>
+    <div class="qr-modal-image"><img id="qrModalImg" src="" alt="QR code" /></div>
+    <p class="qr-modal-url" id="qrModalUrl"></p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="qrModalClose">Close</button>
     </div>
   </div>
 </div>
@@ -1637,6 +1664,27 @@ import {
     if (!(e.ctrlKey || e.metaKey)) return;
     if (e.key==='z' && !e.shiftKey){ e.preventDefault(); undo(); }
     else if (e.key==='y' || (e.key==='z' && e.shiftKey)){ e.preventDefault(); redo(); }
+  });
+
+  // ---------- QR links (WhatsApp group, live board) ----------
+  var qrBackdrop = document.getElementById('qrBackdrop');
+  function qrImageUrl(targetUrl){
+    return 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(targetUrl);
+  }
+  function openQrModal(title, targetUrl){
+    document.getElementById('qrModalTitle').textContent = title;
+    document.getElementById('qrModalImg').src = qrImageUrl(targetUrl);
+    document.getElementById('qrModalUrl').textContent = targetUrl;
+    qrBackdrop.classList.add('show');
+  }
+  document.getElementById('whatsappQrBtn').addEventListener('click', function(){
+    openQrModal('WhatsApp group', 'https://chat.whatsapp.com/BgTSCbn64tOLqRnkfJ4lxv');
+  });
+  document.getElementById('liveBoardQrBtn').addEventListener('click', function(){
+    openQrModal('Live drop-in board', 'https://jtauchus.github.io/AAACTP-Dropin/');
+  });
+  document.getElementById('qrModalClose').addEventListener('click', function(){
+    qrBackdrop.classList.remove('show');
   });
 
   // ---------- Player options popup ----------
