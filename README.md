@@ -129,4 +129,10 @@ Each Friday:
   manage a persistent roster of regulars (`roster/regulars`, separate from
   the weekly board so it survives every reset) for bulk-adding to a night's
   sign-up list. Not linked from `index.html` on purpose; bookmark it directly.
+- `how-it-works.html` — a 12-slide walkthrough of the player-facing loop
+  (sign up → waiting → pool → court → finish), linked from the board's
+  header ("📖 How it works"). Self-contained, no Firestore — safe to open
+  standalone, and the UI snippets in it are hand-built to match `index.html`'s
+  own CSS rather than live screenshots, so keep them in sync if the board's
+  look changes.
 - `firebase-init.js` — shared Firebase/Firestore setup used by both pages.
