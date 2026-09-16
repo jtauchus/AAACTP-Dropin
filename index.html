@@ -422,7 +422,7 @@
       <button class="btn primary" id="startSessionBtn">Start tonight's session</button>
     </div>
     <div class="presession-list-wrap">
-      <h2>Signed up <span class="count-pill" id="signupCount">0</span></h2>
+      <h2>Signed up for <span id="signupDateLabel"></span> · <span class="count-pill" id="signupCount">0</span></h2>
       <div class="free-list" id="signupList"></div>
       <div class="empty-note" id="signupEmptyNote"></div>
     </div>
@@ -1306,7 +1306,7 @@ import {
   }
 
   function renderHeader(){
-    document.getElementById('sessionDateLabel').textContent = 'Signed up for ' + formatSessionDate(state.sessionDate);
+    document.getElementById('sessionDateLabel').textContent = formatSessionDate(state.sessionDate);
     document.getElementById('headcountNum').textContent = totalActivePlayers();
     document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
     document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
@@ -1332,6 +1332,7 @@ import {
   function renderSignupList(){
     var listEl = document.getElementById('signupList');
     var note = document.getElementById('signupEmptyNote');
+    document.getElementById('signupDateLabel').textContent = formatSessionDate(state.sessionDate);
     document.getElementById('signupCount').textContent = state.pool.length;
     listEl.innerHTML = '';
     if (state.pool.length===0){
