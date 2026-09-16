@@ -1306,7 +1306,7 @@ import {
   }
 
   function renderHeader(){
-    document.getElementById('sessionDateLabel').textContent = formatSessionDate(state.sessionDate);
+    document.getElementById('sessionDateLabel').textContent = 'Signed up for ' + formatSessionDate(state.sessionDate);
     document.getElementById('headcountNum').textContent = totalActivePlayers();
     document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
     document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
