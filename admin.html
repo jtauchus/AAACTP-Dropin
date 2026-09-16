@@ -103,7 +103,21 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="modal-backdrop show" id="lockScreen" style="z-index:100;">
+  <div class="modal">
+    <h3>Admin access</h3>
+    <p>Enter the admin passphrase to continue.</p>
+    <input type="password" id="lockInput" placeholder="Passphrase"
+      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      style="width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit; margin-bottom:10px;">
+    <div class="actions">
+      <button class="btn primary" id="lockSubmit">Unlock</button>
+    </div>
+    <p id="lockError" style="color:var(--danger); display:none; margin:10px 0 0;">Incorrect passphrase.</p>
+  </div>
+</div>
+
+<div class="wrap" id="adminContent" style="display:none;">
   <header>
     <h1>Friday Drop-In — Admin</h1>
     <div class="sub">Not linked from the board on purpose — bookmark this page.</div>
@@ -152,6 +166,8 @@
        names for next week. This cannot be undone.</p>
     <button class="btn danger" id="resetBtn">Reset for next Friday</button>
   </div>
+
+  <button class="btn ghost" id="lockAdminBtn" style="font-size:12.5px;">Lock admin</button>
 </div>
 
 <div class="modal-backdrop" id="confirmBackdrop">
@@ -170,9 +186,52 @@
 
 <script type="module">
 import { db, freshBoardState, uid } from './firebase-init.js';
+import { BUILD_TAGS } from './build-tag.js';
 import {
   doc, onSnapshot, setDoc, getDoc, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+// ---------- Admin gate ----------
+// Client-side only — there's no backend to keep a real secret on a static
+// site, so this just keeps casual/accidental visitors out, not a
+// determined one (anyone can read this file). Passphrase persists in
+// localStorage per device once entered; "Lock admin" below clears it.
+var lockScreen = document.getElementById('lockScreen');
+var adminContent = document.getElementById('adminContent');
+var lockInput = document.getElementById('lockInput');
+var lockError = document.getElementById('lockError');
+
+function unlockAdmin(){
+  lockScreen.classList.remove('show');
+  adminContent.style.display = 'block';
+}
+function trySubmit(){
+  if (BUILD_TAGS.indexOf(lockInput.value) > -1){
+    localStorage.setItem('adminUnlocked', '1');
+    lockError.style.display = 'none';
+    unlockAdmin();
+  } else {
+    lockError.style.display = 'block';
+    lockInput.value = '';
+    lockInput.focus();
+  }
+}
+if (localStorage.getItem('adminUnlocked') === '1'){
+  unlockAdmin();
+} else {
+  setTimeout(function(){ lockInput.focus(); }, 50);
+}
+document.getElementById('lockSubmit').addEventListener('click', trySubmit);
+lockInput.addEventListener('keydown', function(e){
+  if (e.key==='Enter' || e.keyCode===13){ e.preventDefault(); trySubmit(); }
+});
+document.getElementById('lockAdminBtn').addEventListener('click', function(){
+  localStorage.removeItem('adminUnlocked');
+  adminContent.style.display = 'none';
+  lockInput.value = '';
+  lockScreen.classList.add('show');
+  lockInput.focus();
+});
 
 var stateDocRef = doc(db, 'boards', 'friday');
 var rosterDocRef = doc(db, 'roster', 'regulars');
