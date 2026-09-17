@@ -115,7 +115,10 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   everyone until changed, editable from the profile page itself) — a
   deterrent against a mis-tap on someone else's name, not real security,
   same as the admin passphrase. An admin can view or reset anyone's
-  password from the 🔑 next to their name in `admin.html`'s roster.
+  password (🔑) or clear their photo (🗑️) right from `admin.html`'s
+  roster list — including anyone who added a photo or password without
+  being a saved regular, who shows up in a separate "Other profiles"
+  list there so they're never unmanageable.
 - **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
   on alerts for this device. Each alert is a short tuned tone burst — a
   different one per event, so it hints at what's coming before anyone's

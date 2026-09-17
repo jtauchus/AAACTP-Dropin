@@ -100,8 +100,14 @@
   .roster-row:last-child{ border-bottom:none; }
   .roster-row input[type="checkbox"]{ width:17px; height:17px; accent-color:var(--ball); flex-shrink:0; }
   .roster-name{ flex:1; }
+  .roster-thumb{
+    width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0;
+    background:var(--panel-3); border:1px solid var(--line);
+  }
   .roster-password{ color:var(--chalk-dim); font-size:14px; padding:2px 6px; }
+  .roster-photo-clear{ color:var(--chalk-dim); font-size:13px; padding:2px 6px; }
   .roster-remove{ color:var(--danger); font-size:13px; padding:2px 6px; }
+  .hide{ display:none !important; }
 </style>
 </head>
 <body>
@@ -159,6 +165,14 @@
       <button class="btn ghost" id="rosterSelectNoneBtn">Select none</button>
     </div>
     <button class="btn primary" id="rosterBulkAddBtn" style="margin-top:10px; display:none;">Add checked to tonight</button>
+  </div>
+
+  <div class="card hide" id="otherProfilesCard">
+    <h2>Other profiles</h2>
+    <p>Anyone who added a photo or set a password without being on the
+       regulars list above — a one-off guest, say. Not part of the weekly
+       bulk-add, but still editable here.</p>
+    <div class="roster-list" id="otherProfilesList"></div>
   </div>
 
   <div class="card">
@@ -363,14 +377,22 @@ function renderRoster(){
     row.className = 'roster-row';
     row.innerHTML =
       '<input type="checkbox" data-roster-check="'+name+'"' + (rosterChecked[name] ? ' checked' : '') + '>' +
+      (rosterPhotos[name] ? '<img class="roster-thumb" src="'+rosterPhotos[name]+'">' : '<span class="roster-thumb"></span>') +
       '<span class="roster-name">'+name+'</span>' +
+      (rosterPhotos[name] ? '<span class="roster-photo-clear" data-roster-clear-photo="'+name+'" title="Clear photo">🗑️</span>' : '') +
       '<span class="roster-password" data-roster-password="'+name+'" title="View/change password">🔑</span>' +
-      '<span class="roster-remove" data-roster-remove="'+name+'">✕</span>';
+      '<span class="roster-remove" data-roster-remove="'+name+'" title="Remove regular">✕</span>';
     listEl.appendChild(row);
   });
   listEl.querySelectorAll('[data-roster-check]').forEach(function(cb){
     cb.addEventListener('change', function(){
       rosterChecked[cb.getAttribute('data-roster-check')] = cb.checked;
+    });
+  });
+  listEl.querySelectorAll('[data-roster-clear-photo]').forEach(function(x){
+    x.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      clearPhoto(x.getAttribute('data-roster-clear-photo'));
     });
   });
   listEl.querySelectorAll('[data-roster-password]').forEach(function(x){
@@ -393,14 +415,76 @@ function renderRoster(){
   });
 }
 
+// Anyone with a saved photo or password who isn't on the regulars list —
+// a one-off guest who used profile.html without ever being added as a
+// regular. They'd otherwise have no way to be managed from here at all.
+function renderOtherProfiles(){
+  var card = document.getElementById('otherProfilesCard');
+  var listEl = document.getElementById('otherProfilesList');
+  var extra = {};
+  Object.keys(rosterPhotos).forEach(function(n){ if (rosterNames.indexOf(n)===-1) extra[n] = true; });
+  Object.keys(rosterPasswords).forEach(function(n){ if (rosterNames.indexOf(n)===-1) extra[n] = true; });
+  var names = Object.keys(extra).sort(function(a,b){ return a.localeCompare(b); });
+  listEl.innerHTML = '';
+  if (names.length===0){
+    card.classList.add('hide');
+    return;
+  }
+  card.classList.remove('hide');
+  names.forEach(function(name){
+    var row = document.createElement('div');
+    row.className = 'roster-row';
+    row.innerHTML =
+      (rosterPhotos[name] ? '<img class="roster-thumb" src="'+rosterPhotos[name]+'">' : '<span class="roster-thumb"></span>') +
+      '<span class="roster-name">'+name+'</span>' +
+      (rosterPhotos[name] ? '<span class="roster-photo-clear" data-other-clear-photo="'+name+'" title="Clear photo">🗑️</span>' : '') +
+      '<span class="roster-password" data-other-password="'+name+'" title="View/change password">🔑</span>' +
+      '<span class="roster-remove" data-other-remove="'+name+'" title="Delete this profile entirely">✕</span>';
+    listEl.appendChild(row);
+  });
+  listEl.querySelectorAll('[data-other-clear-photo]').forEach(function(x){
+    x.addEventListener('click', function(){ clearPhoto(x.getAttribute('data-other-clear-photo')); });
+  });
+  listEl.querySelectorAll('[data-other-password]').forEach(function(x){
+    x.addEventListener('click', function(){ openPasswordModal(x.getAttribute('data-other-password')); });
+  });
+  listEl.querySelectorAll('[data-other-remove]').forEach(function(x){
+    x.addEventListener('click', function(){
+      var name = x.getAttribute('data-other-remove');
+      var photoUpdate = {}; photoUpdate[name] = deleteField();
+      var pwUpdate = {}; pwUpdate[name] = deleteField();
+      setDoc(rosterDocRef, { photos: photoUpdate, passwords: pwUpdate }, { merge:true }).then(function(){
+        showToast('Removed profile for ' + name + '.');
+      }).catch(function(err){
+        console.error('Failed to remove profile:', err);
+        alert("Couldn't remove that profile — check your connection and try again.");
+      });
+    });
+  });
+}
+
+function clearPhoto(name){
+  var update = {};
+  update[name] = deleteField();
+  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+    showToast('Photo cleared for ' + name + '.');
+  }).catch(function(err){
+    console.error('Failed to clear photo:', err);
+    alert("Couldn't clear the photo — check your connection and try again.");
+  });
+}
+
+var rosterPhotos = {};
 var rosterPasswords = {};
 var DEFAULT_PASSWORD = '12345678';
 onSnapshot(rosterDocRef, function(snap){
   var data = snap.exists() ? snap.data() : {};
   rosterNames = data.names || [];
+  rosterPhotos = data.photos || {};
   rosterPasswords = data.passwords || {};
   rosterNames.forEach(function(n){ if (!(n in rosterChecked)) rosterChecked[n] = true; });
   renderRoster();
+  renderOtherProfiles();
 }, function(err){
   console.error('Roster sync error:', err);
 });
