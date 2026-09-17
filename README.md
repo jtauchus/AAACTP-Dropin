@@ -106,8 +106,9 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   a simple built-in cropper, no library. The result is resized down to a
   small square entirely on-device before saving — nothing but that final
   thumbnail ever leaves the phone — and then shows up as a small round
-  avatar next to that name
-  anywhere it appears on the board. Matched by exact name, since there's
+  avatar next to that name anywhere it appears on the board (hover one
+  with a mouse — the courtside iPad's touch screen has no hover — for a
+  larger preview). Matched by exact name, since there's
   no login system tying a photo to a person; the "+ Add Me" box hints
   whether what you typed matches an existing regular ("Welcome back") or
   reads as a new name, to help everyone spell their own name consistently.

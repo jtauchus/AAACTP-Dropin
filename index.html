@@ -196,6 +196,14 @@
     width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;
     vertical-align:middle;
   }
+  .avatar-preview{
+    position:fixed; z-index:300; pointer-events:none;
+    width:160px; height:160px; border-radius:50%; object-fit:cover;
+    border:3px solid var(--ball); box-shadow:0 6px 20px rgba(0,0,0,.5);
+    opacity:0; transform:scale(.85); transition:opacity .12s ease, transform .12s ease;
+    background:var(--panel-2);
+  }
+  .avatar-preview.show{ opacity:1; transform:scale(1); }
   .avatar-placeholder{
     display:inline-block; background:var(--panel-2); border:1px dashed var(--line);
     cursor:pointer;
@@ -461,6 +469,8 @@
     </div>
   </main>
 </div>
+
+<img id="avatarPreview" class="avatar-preview" alt="">
 
 <div class="modal-backdrop" id="modalBackdrop">
   <div class="modal">
@@ -1993,6 +2003,34 @@ import {
     if (localUi.moveSourceCourtId===null) return;
     if (e.target.closest('.free-chip') || e.target.closest('button')) return;
     breakUpCourtToWaiting(localUi.moveSourceCourtId);
+  });
+
+  // ---------- Avatar hover preview ----------
+  // Desktop-only by nature (touch has no hover) — a single shared <img>,
+  // repositioned per-hover rather than one preview per chip, since chips get
+  // torn down and rebuilt on every render. Only real photos qualify: the
+  // waiting-list placeholder (no photo yet) is a <span>, not an <img>, so it
+  // never matches and never shows an empty preview.
+  var avatarPreview = document.getElementById('avatarPreview');
+  function positionAvatarPreview(el){
+    var rect = el.getBoundingClientRect();
+    var size = 160, gap = 12, margin = 8;
+    var left = rect.left + rect.width/2 - size/2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - size - margin));
+    var top = rect.top - size - gap;
+    if (top < margin) top = rect.bottom + gap;
+    avatarPreview.style.left = left + 'px';
+    avatarPreview.style.top = top + 'px';
+  }
+  document.addEventListener('mouseover', function(e){
+    var el = e.target.closest('img.avatar');
+    if (!el) return;
+    avatarPreview.src = el.src;
+    positionAvatarPreview(el);
+    avatarPreview.classList.add('show');
+  });
+  document.addEventListener('mouseout', function(e){
+    if (e.target.closest('img.avatar')) avatarPreview.classList.remove('show');
   });
 
   // ---------- Init ----------
