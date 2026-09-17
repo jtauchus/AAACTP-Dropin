@@ -89,16 +89,17 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
 - **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
-  on ~4-5 second high-pitched alerts for this device — a rapid two-tone
-  siren when the board flips between normal and Server-out mode, and a
-  slow ascending bell arpeggio whenever any court finishes a match. The
-  two are deliberately different in pitch, rhythm, and texture (not just
-  volume), so people can learn to tell them apart by ear even through
-  court noise. Meant for a device with the volume maxed (the courtside
-  iPad, or a phone) so the whole area can hear a change without watching
+  on alerts for this device. Each alert is a short tuned tone burst — a
+  different one per event, so it hints at what's coming before anyone's
+  even listening — followed by a spoken phrase repeated twice with a
+  pause: "Server out" when the board switches into Server-out mode,
+  "Normal mode" when it switches back, and "Match complete" whenever any
+  court finishes a match. Saying the words outright means nobody has to
+  learn what a beep means. Meant for a device with the volume maxed (the
+  courtside iPad, or a phone) so the whole area hears it without watching
   the screen. It's per-device and doesn't sync or persist across a reload
-  — browsers only allow sound after a real tap unlocks it, so re-enable
-  it each time the page loads.
+  — browsers only allow sound/speech after a real tap unlocks them, so
+  re-enable it each time the page loads.
 
 ## iPad kiosk mode
 

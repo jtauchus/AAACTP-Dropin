@@ -569,25 +569,69 @@ import {
     osc.stop(t + duration + 0.02);
   }
 
-  // Both alerts stay high-pitched so they carry across the courts, but run
-  // long (~4.5s) and use opposite timbre/rhythm so they're unmistakable even
-  // heard through pocket noise or from across the courts: a fast, harsh
-  // two-tone siren for "the mode just changed" vs. a slow, ringing bell
-  // arpeggio for "someone finished a match." Square waves carry further
-  // outdoors than sine, so gain is pulled back to compensate for how much
-  // louder/harsher they read at the same level.
-  function playModeChangeChime(){
+  function playSweep(freqStart, freqEnd, startTime, duration, gainPeak, waveType){
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = waveType || 'sine';
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    var t = audioCtx.currentTime + startTime;
+    osc.frequency.setValueAtTime(freqStart, t);
+    osc.frequency.linearRampToValueAtTime(freqEnd, t + duration);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(gainPeak, t + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.start(t);
+    osc.stop(t + duration + 0.02);
+  }
+
+  // Speaks a phrase aloud via the Web Speech API (no audio files) so an
+  // alert says what it means instead of relying on people learning a tone
+  // by ear. Spoken twice with a 1s pause, chained off each utterance's own
+  // 'end' event rather than a fixed delay, since actual speech duration
+  // varies by device/voice. Re-checks alertsEnabled before the repeat so a
+  // toggle-off mid-cycle doesn't queue a stray second utterance.
+  function speakPhrase(phrase, onEnd){
+    if (!('speechSynthesis' in window)){ if (onEnd) onEnd(); return; }
+    var u = new SpeechSynthesisUtterance(phrase);
+    u.rate = 0.95;
+    u.pitch = 1.15;
+    u.volume = 1;
+    if (onEnd) u.onend = onEnd;
+    window.speechSynthesis.speak(u);
+  }
+  function speakTwice(phrase){
+    speakPhrase(phrase, function(){
+      setTimeout(function(){
+        if (alertsEnabled) speakPhrase(phrase);
+      }, 1000);
+    });
+  }
+
+  // Each alert is a short tuned tone burst (to grab attention across the
+  // courts before anyone's even listening) followed by the actual phrase
+  // spoken twice — the tone gets you to look up, the words tell you what
+  // happened. The three bursts use different waveforms/contours so even
+  // the tone alone still hints at which kind of alert is coming: an
+  // urgent rising/falling wail for Server-out, a calm descending ding for
+  // back-to-normal, a bright ascending chirp for a finished match.
+  function playServerOutChime(){
     if (!alertsEnabled || !audioCtx) return;
-    var freqA = 1568, freqB = 2093; // G6 / C7 siren
-    var pulseDur = 0.15, gap = 0.15, pulses = 30; // ~4.5s of rapid alternation
-    for (var i=0;i<pulses;i++){
-      playTone(i%2===0 ? freqA : freqB, i*gap, pulseDur, 0.3, 'square');
-    }
+    playSweep(1200, 2400, 0, 0.3, 0.35, 'sawtooth');
+    playSweep(2400, 1200, 0.3, 0.3, 0.35, 'sawtooth');
+    setTimeout(function(){ speakTwice('Server out'); }, 700);
+  }
+  function playNormalModeChime(){
+    if (!alertsEnabled || !audioCtx) return;
+    playTone(2093, 0, 0.3, 0.4, 'triangle'); // C7
+    playTone(1568, 0.3, 0.4, 0.4, 'triangle'); // G6
+    setTimeout(function(){ speakTwice('Normal mode'); }, 800);
   }
   function playWinnerChime(){
     if (!alertsEnabled || !audioCtx) return;
-    var notes = [1046.5, 1318.5, 1568, 2093, 2637]; // C6 E6 G6 C7 E7, ascending
-    notes.forEach(function(freq, i){ playTone(freq, i*0.85, 1.3, 0.5, 'sine'); });
+    playTone(1568, 0, 0.2, 0.5, 'sine'); // G6
+    playTone(2093, 0.2, 0.3, 0.55, 'sine'); // C7
+    setTimeout(function(){ speakTwice('Match complete'); }, 600);
   }
 
   var stateDocRef = doc(db, 'boards', 'friday');
@@ -1446,7 +1490,9 @@ import {
       return;
     }
     var uneven = serveOutActive();
-    if (lastServeOutActive!==null && lastServeOutActive!==uneven) playModeChangeChime();
+    if (lastServeOutActive!==null && lastServeOutActive!==uneven){
+      if (uneven) playServerOutChime(); else playNormalModeChime();
+    }
     lastServeOutActive = uneven;
     banner.classList.add('show');
     banner.classList.toggle('mode-red', uneven);
@@ -1843,6 +1889,14 @@ import {
   alertsBtn.addEventListener('click', function(){
     if (!alertsEnabled){
       ensureAudioCtx();
+      // iOS only allows speechSynthesis.speak() to start unprompted later
+      // (e.g. from a Firestore listener) if it's first primed with a call
+      // made directly inside a real tap like this one.
+      if ('speechSynthesis' in window){
+        var primer = new SpeechSynthesisUtterance(' ');
+        primer.volume = 0;
+        window.speechSynthesis.speak(primer);
+      }
       alertsEnabled = true;
       alertsBtn.textContent = '🔔';
       alertsBtn.title = 'Sound alerts on for this device — tap to turn off';
