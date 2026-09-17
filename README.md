@@ -21,9 +21,10 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
 
 - **8 courts**, each: `idle` (open) / `closed` (unavailable tonight — someone
   else is using it) / `playing` (doubles, singles, or server-out).
-- **Sign-up / check-in**: people can add their name any time during the week
-  (pre-session sign-up mode); once the board goes live, the same form is used
-  for walk-in check-ins.
+- **Check-in**: "+ Add Me" always drops someone straight into the waiting
+  list — there's no separate pre-session mode. Add your name any time
+  during the week and the swap-pool engine immediately starts grouping and
+  queuing you same as a walk-in on the night itself.
 - **Swap pool**: the engine automatically groups waiting players into pools of
   4, and tops up any in-progress pool the moment enough people are free — but
   the operator can also hand-build or rearrange a group at any time by
@@ -95,6 +96,14 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   board QR") pop up a scannable QR code (generated via api.qrserver.com)
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
+- **Profile photos**: "👤 My photo" in the header opens `profile.html`,
+  where anyone on the regulars roster can find their own name and add a
+  photo from their camera or library. It's resized and center-cropped to a
+  small square entirely on-device before saving — nothing but that final
+  thumbnail ever leaves the phone — and then shows up as a small round
+  avatar next to that name anywhere it appears on the board (waiting list,
+  swap pool, courts). Matched to a checked-in player by exact name, since
+  there's no login system tying the two together.
 - **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
   on alerts for this device. Each alert is a short tuned tone burst — a
   different one per event, so it hints at what's coming before anyone's
@@ -164,4 +173,9 @@ Each Friday:
   standalone, and the UI snippets in it are hand-built to match `index.html`'s
   own CSS rather than live screenshots, so keep them in sync if the board's
   look changes.
-- `firebase-init.js` — shared Firebase/Firestore setup used by both pages.
+- `profile.html` — public, unlocked page where any regular can pick their
+  own name from the roster and add/replace/remove their photo
+  (`roster/regulars`'s new `photos` map, keyed by name). Deliberately kept
+  separate from `admin.html`'s passphrase gate — this is a self-service
+  page for players, not an admin function.
+- `firebase-init.js` — shared Firebase/Firestore setup used by all pages.

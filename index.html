@@ -192,7 +192,11 @@
   }
   .team-names{ font-size:12.5px; line-height:1.3; }
   .team-names .amp{ color:var(--chalk-dim); }
-  .court-player{ cursor:pointer; }
+  .avatar{
+    width:18px; height:18px; border-radius:50%; object-fit:cover; flex-shrink:0;
+    vertical-align:middle;
+  }
+  .court-player{ cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
   .court-player .x{ color:var(--chalk-dim); font-size:10px; margin-left:2px; }
   .court-player:active{ opacity:0.6; }
   .court-player.drop-hover{ outline:2px solid var(--ball); outline-offset:1px; border-radius:4px; }
@@ -385,26 +389,7 @@
     transform:translate(-50%,-130%); white-space:nowrap;
   }
 
-  /* ---------- Pre-session sign-up mode ---------- */
   .hide{ display:none !important; }
-  .presession-panel{
-    flex:1; min-height:0; overflow:auto;
-    padding:24px 20px 32px; display:flex; flex-direction:column; gap:20px;
-    max-width:640px; margin:0 auto; width:100%;
-  }
-  @media (max-width: 880px){
-    .presession-panel{ flex:none; overflow:visible; }
-  }
-  .presession-card{
-    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-    padding:22px; text-align:center;
-  }
-  .presession-card h1{ margin:0 0 10px; font-size:19px; font-weight:600; color:var(--chalk); }
-  .presession-sub{ margin:0 0 18px; font-size:13px; color:var(--chalk-dim); line-height:1.5; }
-  .presession-list-wrap{
-    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px;
-  }
-  .signup-chip .signed{ color:var(--chalk-dim); font-size:10px; }
 
   /* ---------- Loading ---------- */
   .loading-overlay{
@@ -440,21 +425,9 @@
       <button class="btn ghost qr-link-btn" id="whatsappQrBtn">💬 WhatsApp group QR</button>
       <button class="btn ghost qr-link-btn" id="liveBoardQrBtn">🎾 Live board QR</button>
       <a class="btn ghost qr-link-btn" href="how-it-works.html" target="_blank" rel="noopener">📖 How it works</a>
+      <a class="btn ghost qr-link-btn" href="profile.html" target="_blank" rel="noopener">👤 My photo</a>
     </div>
   </header>
-
-  <div id="presessionPanel" class="presession-panel">
-    <div class="presession-card">
-      <h1>Friday Drop-In — Sign-ups Open</h1>
-      <p class="presession-sub">Add your name any time during the week. When tonight's board goes live, everyone here drops into the waiting list and the swap pool starts filling automatically — you can always drag names around or drag a ready group to whichever court you want.</p>
-      <button class="btn primary" id="startSessionBtn">Start tonight's session</button>
-    </div>
-    <div class="presession-list-wrap">
-      <h2>Signed up for <span id="signupDateLabel"></span> · <span class="count-pill" id="signupCount">0</span></h2>
-      <div class="free-list" id="signupList"></div>
-      <div class="empty-note" id="signupEmptyNote"></div>
-    </div>
-  </div>
 
   <main id="mainView">
     <div class="courts-wrap">
@@ -545,6 +518,11 @@ import {
     moveSourceCourtId: null,   // court currently picking a destination to move to
     selectedForSingles: []     // up to 2 free-agent ids picked to start a singles match
   };
+  // Read-only here — editing happens on profile.html. Keyed by name (see
+  // avatarHtml), not synced into `state` since it's a different Firestore
+  // doc (roster/regulars) with its own lifecycle, separate from the weekly
+  // board reset.
+  var rosterPhotos = {};
 
   // ---------- Sound alerts ----------
   // Per-device, never synced: browsers block audio until a real tap unlocks
@@ -645,6 +623,7 @@ import {
   }
 
   var stateDocRef = doc(db, 'boards', 'friday');
+  var rosterDocRef = doc(db, 'roster', 'regulars');
 
   // Every mutation calls commit(): render this device immediately (works
   // even if the network hiccups), then push the new state to Firestore so
@@ -794,7 +773,7 @@ import {
   // is always allowed since it's never wrong to stand down.
   function serveOutActive(){ return !!state.serverOut; }
   function startServerOut(){
-    if (!state.sessionStarted || state.serverOut || !oddOffCourt()) return;
+    if (state.serverOut || !oddOffCourt()) return;
     var before = deepClone(state);
     state.serverOut = true;
     commit('Started Server-out mode', before);
@@ -1046,17 +1025,6 @@ import {
     commit('Reopened Court ' + courtId, before);
   }
 
-  // Flip from pre-session sign-up mode into the live board: whoever already
-  // signed up lands in the waiting list, full stop — no auto-formed pools.
-  // The night starts manual: the first pool comes from someone dragging
-  // names together. The automatic engine only takes over from there.
-  function startSession(){
-    if (state.sessionStarted) return;
-    var before = deepClone(state);
-    state.sessionStarted = true;
-    commit('Started tonight\'s session', before);
-  }
-
   // ---------- Swap pool: automatic + hand-built groups of 4 ----------
   function sortedFreePool(){
     return state.pool.slice()
@@ -1069,7 +1037,6 @@ import {
   // list, so a hand-built pool still gets topped up automatically, and the
   // operator can always pull a specific person out or in afterward.
   function recompute(){
-    if (!state.sessionStarted) return;
     state.pools.forEach(function(p){
       while (p.members.length<4){
         var free = sortedFreePool();
@@ -1314,7 +1281,7 @@ import {
   function addPlayer(name){
     if (!name) return;
     var before = deepClone(state);
-    var label = (state.sessionStarted ? 'Checked in ' : 'Signed up ') + name;
+    var label = 'Checked in ' + name;
     var id = makePlayer(name, 0);
     state.pool.push(id);
     recompute();
@@ -1477,14 +1444,6 @@ import {
     var mins = Math.max(0, Math.floor(ms/60000));
     return mins<1 ? "just now" : mins+"m wait";
   }
-  function fmtSignedAgo(ms){
-    var mins = Math.max(0, Math.floor(ms/60000));
-    if (mins<1) return 'just signed up';
-    if (mins<60) return mins+'m ago';
-    var hrs = Math.floor(mins/60);
-    if (hrs<24) return hrs+'h ago';
-    return Math.floor(hrs/24)+'d ago';
-  }
   // state.sessionDate is a "YYYY-MM-DD" string set from admin's date picker
   // (or null to just mean "today"). Appending a local-midnight time avoids
   // new Date("YYYY-MM-DD") parsing as UTC and displaying a day early/late
@@ -1502,24 +1461,26 @@ import {
     return Math.floor(m/60)+'h ago';
   }
   function nm(pid){ return state.players[pid] ? state.players[pid].name : "—"; }
+  // Profile photos live on the (separate, persistent) regulars roster, keyed
+  // by exact name — tonight's players are just plain name strings with no
+  // link back to a roster id, so matching by name is the only connection
+  // there is. A one-off guest, or a regular whose name was typed slightly
+  // differently at check-in, simply shows no photo.
+  function avatarHtml(pid){
+    var p = state.players[pid];
+    var photo = p && rosterPhotos[p.name];
+    return photo ? '<img class="avatar" src="'+photo+'" alt="">' : '';
+  }
   function courtPlayerSpan(pid, courtId, teamKey){
     if (!pid) return '<b class="court-empty-slot" data-court="'+courtId+'" data-team="'+teamKey+'">drop here</b>';
-    return '<b class="court-player" data-court-player="'+pid+'" data-court="'+courtId+'">' + nm(pid) + ' <span class="x">✕</span></b>';
+    return '<b class="court-player" data-court-player="'+pid+'" data-court="'+courtId+'">' + avatarHtml(pid) + nm(pid) + ' <span class="x">✕</span></b>';
   }
 
   function renderHeader(){
     document.getElementById('sessionDateLabel').textContent = formatSessionDate(state.sessionDate);
     document.getElementById('headcountNum').textContent = totalActivePlayers();
-    document.getElementById('headcountLabel').textContent = state.sessionStarted ? 'checked in' : 'signed up';
-    document.getElementById('addPlayerBtn').textContent = state.sessionStarted ? '+ Add Me' : '+ Sign up';
     var banner = document.getElementById('banner');
     var serverOutBtn = document.getElementById('serverOutBtn');
-    if (!state.sessionStarted){
-      banner.classList.remove('show');
-      document.body.classList.remove('mode-red','mode-green');
-      lastServeOutActive = null; // presession has no mode yet — don't chime the moment a session starts
-      return;
-    }
     var active = serveOutActive(); // the human-declared mode, not the raw headcount
     var odd = oddOffCourt();
     if (lastServeOutActive!==null && lastServeOutActive!==active){
@@ -1546,34 +1507,6 @@ import {
     serverOutBtn.title = active
       ? 'End Server-out mode'
       : odd ? 'Declare Server-out mode' : 'Only available while an odd number of players are off court';
-  }
-
-  function renderSignupList(){
-    var listEl = document.getElementById('signupList');
-    var note = document.getElementById('signupEmptyNote');
-    document.getElementById('signupDateLabel').textContent = formatSessionDate(state.sessionDate);
-    document.getElementById('signupCount').textContent = state.pool.length;
-    listEl.innerHTML = '';
-    if (state.pool.length===0){
-      note.textContent = 'Nobody has signed up yet.';
-      return;
-    }
-    note.textContent = '';
-    state.pool.slice().sort(function(a,b){ return state.players[a].waitSince - state.players[b].waitSince; })
-      .forEach(function(pid){
-        var p = state.players[pid];
-        var el = document.createElement('span');
-        el.className = 'free-chip signup-chip';
-        el.innerHTML = p.name + ' <span class="signed">'+fmtSignedAgo(Date.now()-p.waitSince)+'</span>' +
-          ' <span class="rm" data-remove="'+pid+'">✕</span>';
-        listEl.appendChild(el);
-      });
-    listEl.querySelectorAll('[data-remove]').forEach(function(x){
-      x.addEventListener('click', function(e){
-        e.stopPropagation();
-        openPlayerMenu(x.getAttribute('data-remove'), { type:'pool' });
-      });
-    });
   }
 
   function renderCourts(){
@@ -1708,7 +1641,7 @@ import {
       function slotHtml(idx){
         var pid = p.members[idx];
         if (!pid) return '<span class="pool-slot-empty">drop here</span>';
-        return '<span class="chip" data-pool="'+p.id+'" data-player="'+pid+'">'+nm(pid)+' <span class="x">✕</span></span>';
+        return '<span class="chip" data-pool="'+p.id+'" data-player="'+pid+'">'+avatarHtml(pid)+nm(pid)+' <span class="x">✕</span></span>';
       }
       html += '<div class="pool-teams">' +
         '<div class="pool-team">' + slotHtml(0) + slotHtml(2) + '</div>' +
@@ -1802,7 +1735,7 @@ import {
         var el = document.createElement('span');
         el.className = 'free-chip' + (localUi.selectedForSingles.indexOf(pid)>-1 ? ' selected' : '');
         el.setAttribute('data-select', pid);
-        el.innerHTML = p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
+        el.innerHTML = avatarHtml(pid) + p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
           (p.gamesPlayed>0 ? ' <span class="played">'+p.gamesPlayed+'g</span>' : '') +
           ' <span class="rm" data-remove="'+pid+'">✕</span>';
         listEl.appendChild(el);
@@ -1871,14 +1804,8 @@ import {
   }
 
   function renderAll(){
-    document.getElementById('presessionPanel').classList.toggle('hide', state.sessionStarted);
-    document.getElementById('mainView').classList.toggle('hide', !state.sessionStarted);
     renderHeader();
     renderHistoryUi();
-    if (!state.sessionStarted){
-      renderSignupList();
-      return;
-    }
     renderCourts();
     renderPools();
     renderFreeAgents();
@@ -1888,10 +1815,6 @@ import {
   var backdrop = document.getElementById('modalBackdrop');
   var nameInput = document.getElementById('nameInput');
   function openModal(){
-    document.getElementById('addModalTitle').textContent = state.sessionStarted ? 'Add a player' : 'Sign up for Friday';
-    document.getElementById('addModalDesc').textContent = state.sessionStarted
-      ? "For anyone without a phone — type their name and they'll join the waiting list."
-      : "Add your name to the list — you'll be in the waiting list once tonight's session begins.";
     backdrop.classList.add('show'); nameInput.value=''; setTimeout(function(){nameInput.focus();},50);
   }
   function closeModal(){ backdrop.classList.remove('show'); }
@@ -1909,8 +1832,6 @@ import {
     }
   });
   document.getElementById('startSinglesBtn').addEventListener('click', startSingles);
-  document.getElementById('startSessionBtn').addEventListener('click', startSession);
-
   // ---------- Undo / redo / change history ----------
   document.getElementById('undoBtn').addEventListener('click', undo);
   document.getElementById('redoBtn').addEventListener('click', redo);
@@ -2038,6 +1959,17 @@ import {
       "Can't reach the board — check your connection.";
   });
 
+  // Read-only mirror of roster/regulars just for avatar photos — added or
+  // changed from profile.html, on a different lifecycle than the weekly
+  // board (survives resets), so it's its own listener rather than folded
+  // into stateDocRef above.
+  onSnapshot(rosterDocRef, function(snap){
+    rosterPhotos = (snap.exists() && snap.data().photos) ? snap.data().photos : {};
+    renderAll();
+  }, function(err){
+    console.error('Roster photo sync error:', err);
+  });
+
   // History entries are already synced + labeled for every action, so the
   // "Finished match on Court X" label doubles as a ready-made, precise
   // signal for the winner chime — reused rather than inventing a separate
@@ -2061,10 +1993,6 @@ import {
   });
 
   setInterval(function(){
-    if (!state.sessionStarted){
-      renderSignupList(); // keep "signed up Xh ago" labels ticking during the week
-      return;
-    }
     renderFreeAgents(); // keep "Xm wait" labels ticking
   }, 1000);
 

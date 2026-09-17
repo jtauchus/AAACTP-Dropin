@@ -51,7 +51,8 @@
     display:inline-block; font-size:11px; font-weight:600; color:var(--ink);
     background:var(--ball); padding:3px 10px; border-radius:20px;
   }
-  .mode-pill.presession{ background:var(--panel-3); color:var(--chalk-dim); }
+  .mode-pill.dim{ background:var(--panel-3); color:var(--chalk-dim); }
+  .mode-pill.server-out{ background:var(--danger); }
   p{ font-size:13px; color:var(--chalk-dim); line-height:1.6; }
   .btn{
     border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
@@ -125,9 +126,9 @@
 
   <div class="card">
     <h2>Tonight's board</h2>
-    <div id="modePill" class="mode-pill presession">Loading…</div>
+    <div id="modePill" class="mode-pill dim">Loading…</div>
     <div style="margin-top:14px;">
-      <div class="stat-row"><span class="label">Signed up / checked in</span><span class="value" id="statTotal">—</span></div>
+      <div class="stat-row"><span class="label">Checked in</span><span class="value" id="statTotal">—</span></div>
       <div class="stat-row"><span class="label">Waiting to play</span><span class="value" id="statWaiting">—</span></div>
       <div class="stat-row"><span class="label">In swap-pool groups</span><span class="value" id="statPools">—</span></div>
       <div class="stat-row"><span class="label">Courts in play</span><span class="value" id="statPlaying">—</span></div>
@@ -162,7 +163,7 @@
   <div class="card">
     <h2>Reset for next Friday</h2>
     <p>Clears every player, court, and swap-pool group, and wipes the partner/opponent
-       history. The board goes back to sign-up mode so people can start adding their
+       history. The board goes back to empty so people can start adding their
        names for next week. This cannot be undone.</p>
     <button class="btn danger" id="resetBtn">Reset for next Friday</button>
   </div>
@@ -188,7 +189,7 @@
 import { db, freshBoardState, uid } from './firebase-init.js';
 import { BUILD_TAGS } from './build-tag.js';
 import {
-  doc, onSnapshot, setDoc, getDoc, arrayUnion, arrayRemove
+  doc, onSnapshot, setDoc, getDoc, arrayUnion, arrayRemove, deleteField
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 // ---------- Admin gate ----------
@@ -249,13 +250,9 @@ function renderStats(){
   var modePill = document.getElementById('modePill');
   if (!latestState){
     modePill.textContent = 'Loading…';
-    modePill.className = 'mode-pill presession';
+    modePill.className = 'mode-pill dim';
     return;
   }
-  var started = !!latestState.sessionStarted;
-  modePill.textContent = started ? 'Live — session in progress' : 'Sign-ups open (pre-session)';
-  modePill.className = 'mode-pill' + (started ? '' : ' presession');
-
   var waiting = (latestState.pool || []).length;
   var pooled = (latestState.pools || []).reduce(function(n,p){ return n + p.members.length; }, 0);
   var playing = 0, courtsPlaying = 0;
@@ -263,6 +260,17 @@ function renderStats(){
     if (c.status==='playing'){ courtsPlaying++; playing += c.teamA.length + c.teamB.length; }
   });
   var total = waiting + pooled + playing;
+
+  if (total===0){
+    modePill.textContent = 'No one checked in yet';
+    modePill.className = 'mode-pill dim';
+  } else if (latestState.serverOut){
+    modePill.textContent = 'Server-out mode';
+    modePill.className = 'mode-pill server-out';
+  } else {
+    modePill.textContent = 'Board active';
+    modePill.className = 'mode-pill';
+  }
 
   document.getElementById('statTotal').textContent = total;
   document.getElementById('statWaiting').textContent = waiting;
@@ -353,7 +361,9 @@ function renderRoster(){
       e.preventDefault(); e.stopPropagation();
       var name = x.getAttribute('data-roster-remove');
       delete rosterChecked[name];
-      setDoc(rosterDocRef, { names: arrayRemove(name) }, { merge:true }).catch(function(err){
+      var photoUpdate = {};
+      photoUpdate[name] = deleteField();
+      setDoc(rosterDocRef, { names: arrayRemove(name), photos: photoUpdate }, { merge:true }).catch(function(err){
         console.error('Failed to remove regular:', err);
       });
     });

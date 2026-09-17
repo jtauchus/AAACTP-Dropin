@@ -30,7 +30,6 @@ export function freshBoardState(){
     pool: [],
     pools: [],
     history: { partner:{}, opponent:{} },
-    sessionStarted: false,
     sessionDate: null,
     serverOut: false
   };

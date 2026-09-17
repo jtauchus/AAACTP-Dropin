@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Profile">
+<title>Drop-In Board — My Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#122019;
+    --panel:#1b2b21;
+    --panel-2:#223327;
+    --panel-3:#28392d;
+    --line:#3c5041;
+    --chalk:#edeae2;
+    --chalk-dim:#a7b6a8;
+    --ball:#d7e14a;
+    --danger:#c1755a;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:var(--ink); color:var(--chalk);
+    font-family:'Inter',ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Oswald',ui-sans-serif,system-ui,sans-serif; }
+  .wrap{ max-width:480px; margin:0 auto; padding:28px 20px 60px; }
+  header{ margin-bottom:22px; }
+  header h1{ margin:0 0 4px; font-size:22px; font-weight:600; }
+  header .sub{ font-size:12.5px; color:var(--chalk-dim); line-height:1.5; }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; margin-bottom:18px;
+  }
+  .card h2{ margin:0 0 12px; font-size:15px; font-weight:600; }
+  p{ font-size:13px; color:var(--chalk-dim); line-height:1.6; margin:0 0 12px; }
+  input[type="text"]{
+    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;
+  }
+  .btn{
+    border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
+    padding:12px 18px; border-radius:8px; font-size:14px; font-weight:600;
+    cursor:pointer; width:100%; font-family:inherit; text-align:center;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn.primary{ background:var(--ball); color:var(--ink); border-color:var(--ball); }
+  .btn.danger{ background:transparent; color:var(--danger); border-color:var(--danger); }
+  .btn.ghost{ background:transparent; color:var(--chalk-dim); }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .actions{ display:flex; gap:10px; margin-top:12px; }
+  .actions .btn{ flex:1; }
+
+  .name-list{
+    display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto;
+    margin-top:12px; border-top:1px solid var(--line);
+  }
+  .name-row{
+    display:flex; align-items:center; gap:10px; padding:10px 4px;
+    border-bottom:1px solid var(--line); font-size:14px; cursor:pointer;
+  }
+  .name-row:active{ background:var(--panel-3); }
+  .name-row.selected{ color:var(--ball); font-weight:600; }
+  .name-row .thumb{
+    width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0;
+    background:var(--panel-3); border:1px solid var(--line);
+  }
+  .name-empty{ font-size:12.5px; color:var(--chalk-dim); padding:10px 4px; }
+
+  .editor{ text-align:center; }
+  .editor .selected-name{ font-size:16px; font-weight:600; margin-bottom:14px; }
+  .photo-preview{
+    width:140px; height:140px; border-radius:50%; object-fit:cover;
+    background:var(--panel-3); border:2px solid var(--line);
+    margin:0 auto 16px; display:block;
+  }
+  .photo-preview.placeholder{
+    display:flex; align-items:center; justify-content:center;
+    font-size:44px; color:var(--chalk-dim);
+  }
+  .file-input{ display:none; }
+  .hide{ display:none !important; }
+
+  .loading-text{ color:var(--chalk-dim); font-size:13px; }
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--ball); color:var(--ink); font-weight:600; font-size:13px;
+    padding:10px 18px; border-radius:8px; opacity:0; pointer-events:none;
+    transition:opacity .2s ease; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>My Profile Photo</h1>
+    <div class="sub">Find your name below and add a photo from your camera or
+      library. It shows up next to your name on the board — small, so pick
+      something that reads clearly even tiny: a close-up face works best.</div>
+  </header>
+
+  <div class="card">
+    <h2>Find your name</h2>
+    <input type="text" id="searchInput" placeholder="Start typing your name…" autocomplete="off">
+    <div class="name-list" id="nameList"></div>
+    <div class="name-empty" id="notListedNote" style="display:none;">
+      Not finding your name? You need to be on the regulars roster first —
+      ask an admin to add you in the Drop-In Admin page.
+    </div>
+  </div>
+
+  <div class="card editor hide" id="editorCard">
+    <h2>Your photo</h2>
+    <div class="selected-name" id="selectedNameLabel"></div>
+    <img class="photo-preview hide" id="photoPreviewImg" alt="">
+    <div class="photo-preview placeholder" id="photoPlaceholder">🎾</div>
+    <input type="file" class="file-input" id="photoInput" accept="image/*" capture="user">
+    <button class="btn primary" id="chooseBtn">📷 Take / choose photo</button>
+    <div class="actions">
+      <button class="btn" id="saveBtn" disabled>Save</button>
+      <button class="btn danger" id="removeBtn">Remove photo</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { db } from './firebase-init.js';
+import {
+  doc, onSnapshot, setDoc, deleteField
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+var rosterDocRef = doc(db, 'roster', 'regulars');
+var rosterNames = [];
+var rosterPhotos = {};
+var selectedName = null;
+var pendingDataUrl = null; // a newly-picked photo not yet saved
+
+// Faces stay recognizable at this size even though the board only ever
+// displays them tiny (~18px) — the extra resolution is headroom for this
+// page's own bigger preview. Square crop centers on the source image since
+// there's no manual crop control; keep this small — every regular's photo
+// lives inline in the one shared roster document (Firestore's 1MB/doc
+// cap), so scale here directly trades off against how many people fit.
+var PHOTO_SIZE = 96;
+var JPEG_QUALITY = 0.65;
+
+function showToast(message){
+  var toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(function(){ toast.classList.remove('show'); }, 2500);
+}
+
+var searchInput = document.getElementById('searchInput');
+var nameListEl = document.getElementById('nameList');
+var notListedNote = document.getElementById('notListedNote');
+
+function renderNameList(){
+  var query = searchInput.value.trim().toLowerCase();
+  var matches = rosterNames
+    .filter(function(n){ return n.toLowerCase().indexOf(query) > -1; })
+    .sort(function(a,b){ return a.localeCompare(b); });
+  nameListEl.innerHTML = '';
+  matches.forEach(function(name){
+    var row = document.createElement('div');
+    row.className = 'name-row' + (name===selectedName ? ' selected' : '');
+    var photo = rosterPhotos[name];
+    row.innerHTML = (photo ? '<img class="thumb" src="'+photo+'">' : '<span class="thumb"></span>') +
+      '<span>'+name+'</span>';
+    row.addEventListener('click', function(){ selectName(name); });
+    nameListEl.appendChild(row);
+  });
+  notListedNote.style.display = (query && matches.length===0) ? 'block' : 'none';
+}
+searchInput.addEventListener('input', renderNameList);
+
+var editorCard = document.getElementById('editorCard');
+var selectedNameLabel = document.getElementById('selectedNameLabel');
+var photoPreviewImg = document.getElementById('photoPreviewImg');
+var photoPlaceholder = document.getElementById('photoPlaceholder');
+var saveBtn = document.getElementById('saveBtn');
+var removeBtn = document.getElementById('removeBtn');
+
+function selectName(name){
+  selectedName = name;
+  pendingDataUrl = null;
+  selectedNameLabel.textContent = name;
+  editorCard.classList.remove('hide');
+  renderPreview(rosterPhotos[name] || null);
+  saveBtn.disabled = true;
+  removeBtn.style.display = rosterPhotos[name] ? 'block' : 'none';
+  renderNameList();
+  editorCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function renderPreview(dataUrl){
+  if (dataUrl){
+    photoPreviewImg.src = dataUrl;
+    photoPreviewImg.classList.remove('hide');
+    photoPlaceholder.classList.add('hide');
+  } else {
+    photoPreviewImg.classList.add('hide');
+    photoPlaceholder.classList.remove('hide');
+  }
+}
+
+// Reads the picked file, center-crops it to a square, and downsizes it —
+// done entirely client-side with a canvas so nothing but the final small
+// JPEG ever leaves the device.
+function fileToResizedDataUrl(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var side = Math.min(img.width, img.height);
+        var sx = (img.width - side) / 2;
+        var sy = (img.height - side) / 2;
+        var canvas = document.createElement('canvas');
+        canvas.width = PHOTO_SIZE; canvas.height = PHOTO_SIZE;
+        canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+        resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+      };
+      img.onerror = function(){ reject(new Error('Could not read that image.')); };
+      img.src = reader.result;
+    };
+    reader.onerror = function(){ reject(new Error('Could not read that file.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+var photoInput = document.getElementById('photoInput');
+document.getElementById('chooseBtn').addEventListener('click', function(){
+  photoInput.value = '';
+  photoInput.click();
+});
+photoInput.addEventListener('change', function(){
+  var file = photoInput.files && photoInput.files[0];
+  if (!file) return;
+  fileToResizedDataUrl(file).then(function(dataUrl){
+    pendingDataUrl = dataUrl;
+    renderPreview(dataUrl);
+    saveBtn.disabled = false;
+  }).catch(function(err){
+    console.error('Failed to process photo:', err);
+    alert("Couldn't read that photo — try a different one.");
+  });
+});
+
+saveBtn.addEventListener('click', function(){
+  if (!selectedName || !pendingDataUrl) return;
+  var update = {};
+  update[selectedName] = pendingDataUrl;
+  saveBtn.disabled = true;
+  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+    showToast('Photo saved.');
+    pendingDataUrl = null;
+  }).catch(function(err){
+    console.error('Failed to save photo:', err);
+    alert("Couldn't save your photo — check your connection and try again.");
+    saveBtn.disabled = false;
+  });
+});
+
+removeBtn.addEventListener('click', function(){
+  if (!selectedName) return;
+  var update = {};
+  update[selectedName] = deleteField();
+  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+    showToast('Photo removed.');
+    pendingDataUrl = null;
+  }).catch(function(err){
+    console.error('Failed to remove photo:', err);
+    alert("Couldn't remove your photo — check your connection and try again.");
+  });
+});
+
+onSnapshot(rosterDocRef, function(snap){
+  var data = snap.exists() ? snap.data() : {};
+  rosterNames = data.names || [];
+  rosterPhotos = data.photos || {};
+  renderNameList();
+  if (selectedName){
+    // Own write echoing back (or another device's change to the same
+    // person) — refresh the preview unless there's an unsaved pick pending.
+    selectedNameLabel.textContent = selectedName;
+    removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
+    if (!pendingDataUrl) renderPreview(rosterPhotos[selectedName] || null);
+  }
+}, function(err){
+  console.error('Roster sync error:', err);
+});
+</script>
+</body>
+</html>
