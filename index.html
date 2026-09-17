@@ -196,6 +196,10 @@
     width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;
     vertical-align:middle;
   }
+  .avatar-placeholder{
+    display:inline-block; background:var(--panel-2); border:1px dashed var(--line);
+    cursor:pointer;
+  }
   .court-player{ cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
   .court-player .x{ color:var(--chalk-dim); font-size:10px; margin-left:2px; }
   .court-player:active{ opacity:0.6; }
@@ -1477,6 +1481,17 @@ import {
     var photo = p && rosterPhotos[p.name];
     return photo ? '<img class="avatar" src="'+photo+'" alt="">' : '';
   }
+  // Waiting-list chips already use a plain click to toggle singles selection
+  // (tap two names to start a match), so the avatar is its own always-present
+  // tap target (photo or an empty placeholder circle) for opening the same
+  // player menu pool/court chips get on any click — see renderFreeAgents.
+  function freeAgentAvatarHtml(pid){
+    var p = state.players[pid];
+    var photo = p && rosterPhotos[p.name];
+    return photo
+      ? '<img class="avatar" data-avatar="'+pid+'" src="'+photo+'" alt="">'
+      : '<span class="avatar avatar-placeholder" data-avatar="'+pid+'"></span>';
+  }
   function courtPlayerSpan(pid, courtId, teamKey){
     if (!pid) return '<b class="court-empty-slot" data-court="'+courtId+'" data-team="'+teamKey+'">drop here</b>';
     return '<b class="court-player" data-court-player="'+pid+'" data-court="'+courtId+'">' + avatarHtml(pid) + nm(pid) + ' <span class="x">✕</span></b>';
@@ -1741,18 +1756,22 @@ import {
         var el = document.createElement('span');
         el.className = 'free-chip' + (localUi.selectedForSingles.indexOf(pid)>-1 ? ' selected' : '');
         el.setAttribute('data-select', pid);
-        el.innerHTML = avatarHtml(pid) + p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
+        el.innerHTML = freeAgentAvatarHtml(pid) + p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
           (p.gamesPlayed>0 ? ' <span class="played">'+p.gamesPlayed+'g</span>' : '') +
           ' <span class="rm" data-remove="'+pid+'">✕</span>';
         listEl.appendChild(el);
       });
     listEl.querySelectorAll('.free-chip').forEach(function(chipEl){
       chipEl.addEventListener('pointerdown', function(e){
-        if (e.target.classList.contains('rm')) return;
+        if (e.target.classList.contains('rm') || e.target.hasAttribute('data-avatar')) return;
         startDrag(e, { type:'waiting', playerId: chipEl.getAttribute('data-select') });
       });
       chipEl.addEventListener('click', function(e){
         if (e.target.classList.contains('rm')) return; // handled separately, below
+        if (e.target.hasAttribute('data-avatar')){
+          openPlayerMenu(e.target.getAttribute('data-avatar'), { type:'pool' });
+          return;
+        }
         if (Date.now() < suppressClickUntil) return;
         toggleSinglesSelect(chipEl.getAttribute('data-select'));
       });

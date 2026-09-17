@@ -96,10 +96,12 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   board QR") pop up a scannable QR code (generated via api.qrserver.com)
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
-- **Profile photos**: tap any name on the board (waiting list, swap pool,
-  or a court) and choose "📷 Profile photo" to open `profile.html` scoped
-  to just that person — there's no browsable list of everyone else's
-  names, on purpose. From there, add a photo from your camera or library,
+- **Profile photos**: tap a name on the board (a swap-pool chip, a court
+  player, or — since tapping a waiting-list name already selects it for
+  singles — its avatar circle specifically) and choose "📷 Profile photo"
+  to open `profile.html` scoped to just that person — there's no
+  browsable list of everyone else's names, on purpose. From there, add a
+  photo from your camera or library,
   then drag to reposition and use the slider to zoom before confirming —
   a simple built-in cropper, no library. The result is resized down to a
   small square entirely on-device before saving — nothing but that final
