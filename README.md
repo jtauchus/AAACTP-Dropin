@@ -92,6 +92,12 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   to the last 15 actions.
 - **Session date**: shown at the top of the board (defaults to today);
   set it ahead of time from `admin.html` when prepping a specific Friday.
+- **Session stats**: "Reset for next Friday" in `admin.html` asks whether
+  to save tonight's stats first (checked by default) — who showed up and
+  how many games each person played, written to its own `sessions/<date>`
+  doc before the weekly reset wipes the board. That collection is never
+  touched by the reset itself, so a season's worth of Fridays accumulates
+  there over time instead of being thrown away every week.
 - **QR links**: two buttons under the header ("WhatsApp group QR" / "Live
   board QR") pop up a scannable QR code (generated via api.qrserver.com)
   for the club's WhatsApp invite link and for this board's own URL, each

@@ -191,6 +191,10 @@
     <h3>Reset tonight's board?</h3>
     <p id="confirmDetail">This will remove everyone currently checked in and clear all
        match history. Next Friday's sign-up list starts empty.</p>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--chalk); margin:-4px 0 14px; cursor:pointer;">
+      <input type="checkbox" id="saveStatsCheckbox" checked style="width:17px; height:17px; accent-color:var(--ball); flex-shrink:0;">
+      Save tonight's stats (attendance + games played) before resetting
+    </label>
     <div class="actions">
       <button class="btn ghost" id="confirmCancel">Cancel</button>
       <button class="btn danger" id="confirmReset">Yes, reset it</button>
@@ -331,7 +335,49 @@ sessionDateInput.addEventListener('change', function(){
   });
 });
 
+// ---------- Session stats (saved on reset, if asked) ----------
+// Pulled from `latestState` at the moment of reset — the same union of
+// waiting + pooled + on-court players `renderStats()` already counts,
+// just resolved to actual players instead of a headcount. Written to its
+// own `sessions/{date}` doc, a collection the weekly reset never touches,
+// so a season's worth of Fridays accumulates instead of being wiped.
+function collectAttendance(state){
+  var ids = {};
+  (state.pool || []).forEach(function(pid){ ids[pid] = true; });
+  (state.pools || []).forEach(function(p){
+    p.members.forEach(function(pid){ ids[pid] = true; });
+  });
+  (state.courts || []).forEach(function(c){
+    if (c.status==='playing'){
+      c.teamA.forEach(function(pid){ ids[pid] = true; });
+      c.teamB.forEach(function(pid){ ids[pid] = true; });
+    }
+  });
+  return Object.keys(ids).map(function(pid){
+    var p = state.players[pid];
+    return p ? { name: p.name, gamesPlayed: p.gamesPlayed || 0 } : null;
+  }).filter(Boolean).sort(function(a,b){ return b.gamesPlayed - a.gamesPlayed; });
+}
+function todayDateString(){
+  var d = new Date();
+  var mm = String(d.getMonth()+1).padStart(2,'0');
+  var dd = String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+function saveSessionStats(){
+  var attendance = collectAttendance(latestState || freshBoardState());
+  var date = (latestState && latestState.sessionDate) || todayDateString();
+  var sessionDocRef = doc(db, 'sessions', date);
+  return setDoc(sessionDocRef, {
+    date: date,
+    savedAt: Date.now(),
+    totalPlayers: attendance.length,
+    attendance: attendance
+  });
+}
+
 var confirmBackdrop = document.getElementById('confirmBackdrop');
+var saveStatsCheckbox = document.getElementById('saveStatsCheckbox');
 document.getElementById('resetBtn').addEventListener('click', function(){
   confirmBackdrop.classList.add('show');
 });
@@ -340,11 +386,14 @@ document.getElementById('confirmCancel').addEventListener('click', function(){
 });
 document.getElementById('confirmReset').addEventListener('click', function(){
   confirmBackdrop.classList.remove('show');
-  Promise.all([
-    setDoc(stateDocRef, freshBoardState()),
-    setDoc(historyDocRef, { undo: [], redo: [] })
-  ]).then(function(){
-    showToast('Board reset for next Friday.');
+  var wantsStats = saveStatsCheckbox.checked;
+  (wantsStats ? saveSessionStats() : Promise.resolve()).then(function(){
+    return Promise.all([
+      setDoc(stateDocRef, freshBoardState()),
+      setDoc(historyDocRef, { undo: [], redo: [] })
+    ]);
+  }).then(function(){
+    showToast(wantsStats ? 'Stats saved. Board reset for next Friday.' : 'Board reset for next Friday.');
   }).catch(function(err){
     console.error('Failed to reset board:', err);
     alert("Couldn't reset the board — check your connection and try again.");
