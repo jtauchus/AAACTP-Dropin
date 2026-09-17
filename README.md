@@ -99,10 +99,12 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
 - **Profile photos**: tap any name on the board (waiting list, swap pool,
   or a court) and choose "📷 Profile photo" to open `profile.html` scoped
   to just that person — there's no browsable list of everyone else's
-  names, on purpose. From there, add a photo from your camera or library;
-  it's resized and center-cropped to a small square entirely on-device
-  before saving — nothing but that final thumbnail ever leaves the
-  phone — and then shows up as a small round avatar next to that name
+  names, on purpose. From there, add a photo from your camera or library,
+  then drag to reposition and use the slider to zoom before confirming —
+  a simple built-in cropper, no library. The result is resized down to a
+  small square entirely on-device before saving — nothing but that final
+  thumbnail ever leaves the phone — and then shows up as a small round
+  avatar next to that name
   anywhere it appears on the board. Matched by exact name, since there's
   no login system tying a photo to a person; the "+ Add Me" box hints
   whether what you typed matches an existing regular ("Welcome back") or

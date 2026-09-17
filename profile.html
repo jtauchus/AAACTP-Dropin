@@ -77,6 +77,20 @@
   .password-card h2{ margin:0 0 10px; font-size:15px; font-weight:600; text-align:left; }
   .password-card p{ text-align:left; }
 
+  .crop-frame{
+    width:240px; height:240px; margin:0 auto 14px; border-radius:50%;
+    overflow:hidden; position:relative; background:var(--panel-3);
+    border:2px solid var(--line); touch-action:none; cursor:grab;
+  }
+  .crop-frame:active{ cursor:grabbing; }
+  .crop-frame img{
+    position:absolute; left:50%; top:50%; max-width:none; max-height:none;
+    -webkit-user-drag:none; user-select:none; pointer-events:none;
+  }
+  input[type="range"]{
+    width:100%; margin:0 0 14px; accent-color:var(--ball);
+  }
+
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
     background:var(--ball); color:var(--ink); font-weight:600; font-size:13px;
@@ -109,15 +123,30 @@
 
   <div class="card editor hide" id="editorCard">
     <div class="selected-name" id="selectedNameLabel"></div>
-    <p>Add a photo from your camera or library. It shows up next to your
-      name on the board — small, so a close-up face reads best.</p>
-    <img class="photo-preview hide" id="photoPreviewImg" alt="">
-    <div class="photo-preview placeholder" id="photoPlaceholder">🎾</div>
-    <input type="file" class="file-input" id="photoInput" accept="image/*" capture="user">
-    <button class="btn primary" id="chooseBtn">📷 Take / choose photo</button>
-    <div class="actions">
-      <button class="btn" id="saveBtn" disabled>Save</button>
-      <button class="btn danger" id="removeBtn">Remove photo</button>
+
+    <div id="photoSection">
+      <p>Add a photo from your camera or library. It shows up next to your
+        name on the board — small, so a close-up face reads best.</p>
+      <img class="photo-preview hide" id="photoPreviewImg" alt="">
+      <div class="photo-preview placeholder" id="photoPlaceholder">🎾</div>
+      <input type="file" class="file-input" id="photoInput" accept="image/*" capture="user">
+      <button class="btn primary" id="chooseBtn">📷 Take / choose photo</button>
+      <div class="actions">
+        <button class="btn" id="saveBtn" disabled>Save</button>
+        <button class="btn danger" id="removeBtn">Remove photo</button>
+      </div>
+    </div>
+
+    <div class="hide" id="cropSection">
+      <p>Drag to reposition, use the slider to zoom in.</p>
+      <div class="crop-frame" id="cropFrame">
+        <img id="cropImg" draggable="false" alt="">
+      </div>
+      <input type="range" id="zoomSlider" min="1" max="3" step="0.01" value="1">
+      <div class="actions">
+        <button class="btn" id="cropCancelBtn">Cancel</button>
+        <button class="btn primary" id="cropConfirmBtn">Use this photo</button>
+      </div>
     </div>
   </div>
 
@@ -152,10 +181,9 @@ var pendingDataUrl = null; // a newly-picked photo not yet saved
 
 // Faces stay recognizable at this size even though the board only ever
 // displays them tiny (~18px) — the extra resolution is headroom for this
-// page's own bigger preview. Square crop centers on the source image since
-// there's no manual crop control; keep this small — every photo lives
-// inline in the one shared roster document (Firestore's 1MB/doc cap), so
-// scale here directly trades off against how many people fit.
+// page's own bigger preview. Keep this small — every photo lives inline in
+// the one shared roster document (Firestore's 1MB/doc cap), so scale here
+// directly trades off against how many people fit.
 var PHOTO_SIZE = 96;
 var JPEG_QUALITY = 0.65;
 
@@ -227,30 +255,105 @@ function renderPreview(dataUrl){
   }
 }
 
-// Reads the picked file, center-crops it to a square, and downsizes it —
-// done entirely client-side with a canvas so nothing but the final small
-// JPEG ever leaves the device.
-function fileToResizedDataUrl(file){
+function readFileAsDataUrl(file){
   return new Promise(function(resolve, reject){
     var reader = new FileReader();
-    reader.onload = function(){
-      var img = new Image();
-      img.onload = function(){
-        var side = Math.min(img.width, img.height);
-        var sx = (img.width - side) / 2;
-        var sy = (img.height - side) / 2;
-        var canvas = document.createElement('canvas');
-        canvas.width = PHOTO_SIZE; canvas.height = PHOTO_SIZE;
-        canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
-        resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
-      };
-      img.onerror = function(){ reject(new Error('Could not read that image.')); };
-      img.src = reader.result;
-    };
+    reader.onload = function(){ resolve(reader.result); };
     reader.onerror = function(){ reject(new Error('Could not read that file.')); };
     reader.readAsDataURL(file);
   });
 }
+
+// ---------- Crop UI ----------
+// A minimal pan/zoom cropper (drag to reposition, slider to zoom) since
+// there's no library here — the frame is a fixed-size circle and the image
+// is panned/scaled under it; cropState tracks that in CSS-pixel terms, and
+// confirmCrop() converts the frame's visible window back into the source
+// image's own natural-pixel coordinates for the final canvas draw.
+var photoSection = document.getElementById('photoSection');
+var cropSection = document.getElementById('cropSection');
+var cropFrame = document.getElementById('cropFrame');
+var cropImg = document.getElementById('cropImg');
+var zoomSlider = document.getElementById('zoomSlider');
+var FRAME_SIZE = 240;
+var cropState = null; // { naturalW, naturalH, baseScale, zoom, panX, panY }
+var dragStart = null;
+
+function openCropUI(dataUrl){
+  var img = new Image();
+  img.onload = function(){
+    cropState = {
+      naturalW: img.naturalWidth,
+      naturalH: img.naturalHeight,
+      baseScale: FRAME_SIZE / Math.min(img.naturalWidth, img.naturalHeight),
+      zoom: 1, panX: 0, panY: 0
+    };
+    cropImg.src = dataUrl;
+    zoomSlider.value = 1;
+    renderCrop();
+    photoSection.classList.add('hide');
+    cropSection.classList.remove('hide');
+  };
+  img.onerror = function(){ alert("Couldn't read that photo — try a different one."); };
+  img.src = dataUrl;
+}
+function closeCropUI(){
+  cropSection.classList.add('hide');
+  photoSection.classList.remove('hide');
+  cropState = null;
+}
+function clampPan(){
+  var dispW = cropState.naturalW * cropState.baseScale * cropState.zoom;
+  var dispH = cropState.naturalH * cropState.baseScale * cropState.zoom;
+  var maxX = Math.max(0, (dispW - FRAME_SIZE) / 2);
+  var maxY = Math.max(0, (dispH - FRAME_SIZE) / 2);
+  cropState.panX = Math.max(-maxX, Math.min(maxX, cropState.panX));
+  cropState.panY = Math.max(-maxY, Math.min(maxY, cropState.panY));
+}
+function renderCrop(){
+  var dispW = cropState.naturalW * cropState.baseScale * cropState.zoom;
+  var dispH = cropState.naturalH * cropState.baseScale * cropState.zoom;
+  cropImg.style.width = dispW + 'px';
+  cropImg.style.height = dispH + 'px';
+  cropImg.style.transform = 'translate(-50%, -50%) translate(' + cropState.panX + 'px, ' + cropState.panY + 'px)';
+}
+cropFrame.addEventListener('pointerdown', function(e){
+  if (!cropState) return;
+  dragStart = { x: e.clientX, y: e.clientY, panX: cropState.panX, panY: cropState.panY };
+  cropFrame.setPointerCapture(e.pointerId);
+});
+cropFrame.addEventListener('pointermove', function(e){
+  if (!dragStart) return;
+  cropState.panX = dragStart.panX + (e.clientX - dragStart.x);
+  cropState.panY = dragStart.panY + (e.clientY - dragStart.y);
+  clampPan();
+  renderCrop();
+});
+cropFrame.addEventListener('pointerup', function(){ dragStart = null; });
+cropFrame.addEventListener('pointercancel', function(){ dragStart = null; });
+zoomSlider.addEventListener('input', function(){
+  if (!cropState) return;
+  cropState.zoom = parseFloat(zoomSlider.value);
+  clampPan();
+  renderCrop();
+});
+document.getElementById('cropCancelBtn').addEventListener('click', function(){
+  photoInput.value = '';
+  closeCropUI();
+});
+document.getElementById('cropConfirmBtn').addEventListener('click', function(){
+  var totalScale = cropState.baseScale * cropState.zoom;
+  var sSide = FRAME_SIZE / totalScale;
+  var sx = (cropState.naturalW * totalScale / 2 - FRAME_SIZE / 2 - cropState.panX) / totalScale;
+  var sy = (cropState.naturalH * totalScale / 2 - FRAME_SIZE / 2 - cropState.panY) / totalScale;
+  var canvas = document.createElement('canvas');
+  canvas.width = PHOTO_SIZE; canvas.height = PHOTO_SIZE;
+  canvas.getContext('2d').drawImage(cropImg, sx, sy, sSide, sSide, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+  pendingDataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  renderPreview(pendingDataUrl);
+  saveBtn.disabled = false;
+  closeCropUI();
+});
 
 var photoInput = document.getElementById('photoInput');
 document.getElementById('chooseBtn').addEventListener('click', function(){
@@ -260,12 +363,10 @@ document.getElementById('chooseBtn').addEventListener('click', function(){
 photoInput.addEventListener('change', function(){
   var file = photoInput.files && photoInput.files[0];
   if (!file) return;
-  fileToResizedDataUrl(file).then(function(dataUrl){
-    pendingDataUrl = dataUrl;
-    renderPreview(dataUrl);
-    saveBtn.disabled = false;
+  readFileAsDataUrl(file).then(function(dataUrl){
+    openCropUI(dataUrl);
   }).catch(function(err){
-    console.error('Failed to process photo:', err);
+    console.error('Failed to read photo:', err);
     alert("Couldn't read that photo — try a different one.");
   });
 });
