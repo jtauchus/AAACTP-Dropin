@@ -63,7 +63,11 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
 - **Singles**: tap two names in the waiting list to select them, then start a
   singles match on the lowest-numbered open court.
 - **Move a group**: any active court can relocate its whole match to another
-  open court (useful if a court needs to be vacated).
+  open court (useful if a court needs to be vacated). If no court is free,
+  "Move to…" also highlights the swap pool's "new group" spot and the
+  waiting list — tap either to send that match there instead (as one fresh
+  pool, or scattered back into the general line) rather than being stuck
+  with nowhere to move it.
 - **A player needs to leave mid-match**: tap their name and confirm "Remove
   from play" — no auto-substitute. This leaves an open slot on the court:
   drag a waiting/pooled player onto it to fill the gap, or drag the whole
