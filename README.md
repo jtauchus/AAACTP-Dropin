@@ -55,11 +55,18 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   way as any other foursome) instead of waiting for the general waiting
   list. Each pool still tops up from the waiting list as usual if no other
   same-kind pool is available to combine with.
-- **Server-out mode**: the moment 3 or fewer players are in the free pool,
-  every active court (not just new ones) switches to Server-out. Since the
-  app can't track whose serve it actually is, every on-court player gets
-  their own "Out" button — tapping it pulls the longest-waiting free agent
-  in to take that spot, and the outgoing player joins the back of the pool.
+- **Server-out mode**: an odd number of players off court means someone is
+  always one player short of a full group, so this mode has every on-court
+  player rotate through their own "Out" button — tapping it pulls the
+  longest-waiting free agent in to take that spot, and the outgoing player
+  joins the back of the pool. It's declared by a person, not automatic: the
+  header banner turns amber and a "Start Server-out" button lights up once
+  the count is actually odd, and someone who can see they're really the
+  odd one out (nobody else mid-check-in) taps it. Driving this off the raw
+  headcount instead caused false flips — with two people checking in at
+  once, the count blips even the moment the first one finishes, before the
+  second is done. "End Server-out" is always available once it's on, since
+  standing down is never the wrong call.
 - **Singles**: tap two names in the waiting list to select them, then start a
   singles match on the lowest-numbered open court.
 - **Move a group**: any active court can relocate its whole match to another
