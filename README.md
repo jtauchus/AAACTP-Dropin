@@ -169,6 +169,10 @@ Each Friday:
    read/write (`allow read, write: if true`) since there's no login system —
    fine for a casual club app with nothing sensitive in it, but worth
    revisiting if that ever changes.
+3. **Skill-aware pairing**: add a ranking/skill level to each profile
+   (`profile.html`, alongside the photo) so `pickBestPartition` can balance
+   skill across a foursome, not just minimize repeat partners/opponents —
+   refining pool splits beyond pure variety.
 
 ## Files
 
