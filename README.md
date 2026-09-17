@@ -68,6 +68,12 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   once, the count blips even the moment the first one finishes, before the
   second is done. "End Server-out" is always available once it's on, since
   standing down is never the wrong call.
+- **Wait-time clock**: with sign-ups landing any day of the week, a "wait"
+  time counted from the moment someone added their name would show absurd
+  multi-day numbers for an early-week sign-up by Friday. So the waiting
+  list shows no wait time at all until the first "Start Server-out" of the
+  night, which re-baselines everyone currently waiting to "waiting since
+  right now" and turns the clock on for the rest of the session.
 - **Singles**: tap two names in the waiting list to select them, then start a
   singles match on the lowest-numbered open court.
 - **Move a group**: any active court can relocate its whole match to another

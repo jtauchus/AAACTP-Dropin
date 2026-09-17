@@ -798,9 +798,21 @@ import {
   // it; starting is only allowed while the count really is odd, but ending
   // is always allowed since it's never wrong to stand down.
   function serveOutActive(){ return !!state.serverOut; }
+  // Sign-ups can land any day of the week now (no more pre-session staging),
+  // so a Monday check-in's waitSince would otherwise show a nonsense multi-
+  // day "wait" and unfairly jump the queue ahead of everyone who actually
+  // showed up Friday. Starting Server-out — the first real signal that
+  // tonight's group has assembled — re-baselines everyone currently
+  // waiting to "waiting since right now," and (see renderFreeAgents) the
+  // wait-time display itself doesn't even appear before that's happened.
   function startServerOut(){
     if (state.serverOut || !oddOffCourt()) return;
     var before = deepClone(state);
+    var now = Date.now();
+    state.pool.forEach(function(pid){
+      if (state.players[pid]) state.players[pid].waitSince = now;
+    });
+    state.waitClockStarted = true;
     state.serverOut = true;
     commit('Started Server-out mode', before);
   }
@@ -1774,7 +1786,8 @@ import {
         var el = document.createElement('span');
         el.className = 'free-chip' + (localUi.selectedForSingles.indexOf(pid)>-1 ? ' selected' : '');
         el.setAttribute('data-select', pid);
-        el.innerHTML = freeAgentAvatarHtml(pid) + p.name + ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' +
+        el.innerHTML = freeAgentAvatarHtml(pid) + p.name +
+          (state.waitClockStarted ? ' <span class="wait">'+fmtWait(Date.now()-p.waitSince)+'</span>' : '') +
           (p.gamesPlayed>0 ? ' <span class="played">'+p.gamesPlayed+'g</span>' : '') +
           ' <span class="rm" data-remove="'+pid+'">✕</span>';
         listEl.appendChild(el);
