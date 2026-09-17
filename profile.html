@@ -40,6 +40,11 @@
     padding:18px; margin-bottom:18px;
   }
   p{ font-size:13px; color:var(--chalk-dim); line-height:1.6; margin:0 0 12px; }
+  input[type="text"], input[type="password"]{
+    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;
+    margin-bottom:10px;
+  }
   .btn{
     border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
     padding:12px 18px; border-radius:8px; font-size:14px; font-weight:600;
@@ -51,6 +56,10 @@
   .btn:disabled{ opacity:.5; cursor:default; }
   .actions{ display:flex; gap:10px; margin-top:12px; }
   .actions .btn{ flex:1; }
+
+  .lock-card{ text-align:center; }
+  .lock-card .selected-name{ font-size:18px; font-weight:600; margin-bottom:10px; }
+  .lock-error{ color:var(--danger); font-size:12.5px; margin:-4px 0 10px; }
 
   .editor{ text-align:center; }
   .editor .selected-name{ font-size:18px; font-weight:600; margin-bottom:14px; }
@@ -65,6 +74,8 @@
   }
   .file-input{ display:none; }
   .hide{ display:none !important; }
+  .password-card h2{ margin:0 0 10px; font-size:15px; font-weight:600; text-align:left; }
+  .password-card p{ text-align:left; }
 
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
@@ -87,6 +98,15 @@
       then choose "📷 Profile photo" from the menu.</p>
   </div>
 
+  <div class="card lock-card hide" id="lockCard">
+    <div class="selected-name" id="lockNameLabel"></div>
+    <p>Enter your password to edit your profile. Everyone starts on the
+      default password <b>12345678</b> until they set their own.</p>
+    <input type="password" id="passwordInput" placeholder="Password" autocomplete="off" inputmode="numeric">
+    <div class="lock-error hide" id="lockError">Incorrect password.</div>
+    <button class="btn primary" id="unlockBtn" disabled>Loading…</button>
+  </div>
+
   <div class="card editor hide" id="editorCard">
     <div class="selected-name" id="selectedNameLabel"></div>
     <p>Add a photo from your camera or library. It shows up next to your
@@ -100,6 +120,14 @@
       <button class="btn danger" id="removeBtn">Remove photo</button>
     </div>
   </div>
+
+  <div class="card password-card hide" id="passwordCard">
+    <h2>Change password</h2>
+    <p>Whatever you set here is what you'll enter next time you open this
+      page for yourself.</p>
+    <input type="password" id="newPasswordInput" placeholder="New password" autocomplete="off" inputmode="numeric">
+    <button class="btn" id="savePasswordBtn">Save password</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -112,6 +140,10 @@ import {
 
 var rosterDocRef = doc(db, 'roster', 'regulars');
 var rosterPhotos = {};
+var rosterPasswords = {};
+var rosterLoaded = false;
+var unlocked = false;
+var DEFAULT_PASSWORD = '12345678';
 // Whoever opened this page from their own name on the board — carried via
 // the URL from index.html's player menu, not a name you pick from a list,
 // so this page never has to show anyone else's name.
@@ -135,7 +167,13 @@ function showToast(message){
 }
 
 var noNameCard = document.getElementById('noNameCard');
+var lockCard = document.getElementById('lockCard');
+var lockNameLabel = document.getElementById('lockNameLabel');
+var passwordInput = document.getElementById('passwordInput');
+var lockError = document.getElementById('lockError');
+var unlockBtn = document.getElementById('unlockBtn');
 var editorCard = document.getElementById('editorCard');
+var passwordCard = document.getElementById('passwordCard');
 var selectedNameLabel = document.getElementById('selectedNameLabel');
 var photoPreviewImg = document.getElementById('photoPreviewImg');
 var photoPlaceholder = document.getElementById('photoPlaceholder');
@@ -144,9 +182,39 @@ var removeBtn = document.getElementById('removeBtn');
 
 if (selectedName){
   noNameCard.classList.add('hide');
-  editorCard.classList.remove('hide');
-  selectedNameLabel.textContent = selectedName;
+  lockCard.classList.remove('hide');
+  lockNameLabel.textContent = selectedName;
 }
+
+// Plain text, matching the same lightweight-deterrent security level as
+// admin.html's own passphrase — there's no backend on a static site to
+// keep a real secret, so this only stops a casual mis-tap on someone
+// else's name, not a determined person willing to read this file.
+function effectivePassword(name){
+  return rosterPasswords[name] || DEFAULT_PASSWORD;
+}
+
+function tryUnlock(){
+  if (!rosterLoaded || unlockBtn.disabled) return;
+  if (passwordInput.value === effectivePassword(selectedName)){
+    unlocked = true;
+    lockCard.classList.add('hide');
+    editorCard.classList.remove('hide');
+    passwordCard.classList.remove('hide');
+    selectedNameLabel.textContent = selectedName;
+    removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
+    renderPreview(rosterPhotos[selectedName] || null);
+  } else {
+    lockError.classList.remove('hide');
+    passwordInput.value = '';
+    passwordInput.focus();
+  }
+}
+unlockBtn.addEventListener('click', tryUnlock);
+passwordInput.addEventListener('input', function(){ lockError.classList.add('hide'); });
+passwordInput.addEventListener('keydown', function(e){
+  if (e.key==='Enter' || e.keyCode===13){ e.preventDefault(); tryUnlock(); }
+});
 
 function renderPreview(dataUrl){
   if (dataUrl){
@@ -230,13 +298,36 @@ removeBtn.addEventListener('click', function(){
   });
 });
 
+var newPasswordInput = document.getElementById('newPasswordInput');
+document.getElementById('savePasswordBtn').addEventListener('click', function(){
+  var next = newPasswordInput.value.trim();
+  if (!selectedName || !next) return;
+  var update = {};
+  update[selectedName] = next;
+  setDoc(rosterDocRef, { passwords: update }, { merge:true }).then(function(){
+    newPasswordInput.value = '';
+    showToast('Password updated.');
+  }).catch(function(err){
+    console.error('Failed to update password:', err);
+    alert("Couldn't update your password — check your connection and try again.");
+  });
+});
+
 if (selectedName){
   onSnapshot(rosterDocRef, function(snap){
-    rosterPhotos = (snap.exists() && snap.data().photos) ? snap.data().photos : {};
-    removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
-    // Own write echoing back (or another device's change to the same
-    // person) — refresh the preview unless there's an unsaved pick pending.
-    if (!pendingDataUrl) renderPreview(rosterPhotos[selectedName] || null);
+    var data = snap.exists() ? snap.data() : {};
+    rosterPhotos = data.photos || {};
+    rosterPasswords = data.passwords || {};
+    rosterLoaded = true;
+    if (!unlocked){
+      unlockBtn.disabled = false;
+      unlockBtn.textContent = 'Unlock';
+    } else {
+      // Own write echoing back (or another device's change to the same
+      // person) — refresh the preview unless there's an unsaved pick pending.
+      removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
+      if (!pendingDataUrl) renderPreview(rosterPhotos[selectedName] || null);
+    }
   }, function(err){
     console.error('Roster sync error:', err);
   });

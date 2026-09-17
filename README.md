@@ -107,6 +107,11 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   no login system tying a photo to a person; the "+ Add Me" box hints
   whether what you typed matches an existing regular ("Welcome back") or
   reads as a new name, to help everyone spell their own name consistently.
+  Editing is behind a per-person password (default `12345678` for
+  everyone until changed, editable from the profile page itself) — a
+  deterrent against a mis-tap on someone else's name, not real security,
+  same as the admin passphrase. An admin can view or reset anyone's
+  password from the 🔑 next to their name in `admin.html`'s roster.
 - **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
   on alerts for this device. Each alert is a short tuned tone burst — a
   different one per event, so it hints at what's coming before anyone's

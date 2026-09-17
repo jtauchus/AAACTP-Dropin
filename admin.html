@@ -100,6 +100,7 @@
   .roster-row:last-child{ border-bottom:none; }
   .roster-row input[type="checkbox"]{ width:17px; height:17px; accent-color:var(--ball); flex-shrink:0; }
   .roster-name{ flex:1; }
+  .roster-password{ color:var(--chalk-dim); font-size:14px; padding:2px 6px; }
   .roster-remove{ color:var(--danger); font-size:13px; padding:2px 6px; }
 </style>
 </head>
@@ -179,6 +180,21 @@
     <div class="actions">
       <button class="btn ghost" id="confirmCancel">Cancel</button>
       <button class="btn danger" id="confirmReset">Yes, reset it</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="passwordBackdrop">
+  <div class="modal">
+    <h3>Password for <span id="passwordModalName"></span></h3>
+    <p>Shown in plain text — same lightweight-deterrent security as the
+       admin passphrase, not real security. Defaults to <b>12345678</b>
+       until they (or you) change it.</p>
+    <input type="text" id="passwordModalInput"
+      style="width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;">
+    <div class="actions">
+      <button class="btn ghost" id="passwordModalCancel">Cancel</button>
+      <button class="btn" id="passwordModalSave">Save</button>
     </div>
   </div>
 </div>
@@ -348,12 +364,19 @@ function renderRoster(){
     row.innerHTML =
       '<input type="checkbox" data-roster-check="'+name+'"' + (rosterChecked[name] ? ' checked' : '') + '>' +
       '<span class="roster-name">'+name+'</span>' +
+      '<span class="roster-password" data-roster-password="'+name+'" title="View/change password">🔑</span>' +
       '<span class="roster-remove" data-roster-remove="'+name+'">✕</span>';
     listEl.appendChild(row);
   });
   listEl.querySelectorAll('[data-roster-check]').forEach(function(cb){
     cb.addEventListener('change', function(){
       rosterChecked[cb.getAttribute('data-roster-check')] = cb.checked;
+    });
+  });
+  listEl.querySelectorAll('[data-roster-password]').forEach(function(x){
+    x.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      openPasswordModal(x.getAttribute('data-roster-password'));
     });
   });
   listEl.querySelectorAll('[data-roster-remove]').forEach(function(x){
@@ -370,12 +393,45 @@ function renderRoster(){
   });
 }
 
+var rosterPasswords = {};
+var DEFAULT_PASSWORD = '12345678';
 onSnapshot(rosterDocRef, function(snap){
-  rosterNames = (snap.exists() && snap.data().names) ? snap.data().names : [];
+  var data = snap.exists() ? snap.data() : {};
+  rosterNames = data.names || [];
+  rosterPasswords = data.passwords || {};
   rosterNames.forEach(function(n){ if (!(n in rosterChecked)) rosterChecked[n] = true; });
   renderRoster();
 }, function(err){
   console.error('Roster sync error:', err);
+});
+
+// ---------- Regular passwords (view/change from the roster list) ----------
+var passwordBackdrop = document.getElementById('passwordBackdrop');
+var passwordModalName = document.getElementById('passwordModalName');
+var passwordModalInput = document.getElementById('passwordModalInput');
+var passwordModalTarget = null;
+
+function openPasswordModal(name){
+  passwordModalTarget = name;
+  passwordModalName.textContent = name;
+  passwordModalInput.value = rosterPasswords[name] || DEFAULT_PASSWORD;
+  passwordBackdrop.classList.add('show');
+}
+document.getElementById('passwordModalCancel').addEventListener('click', function(){
+  passwordBackdrop.classList.remove('show');
+});
+document.getElementById('passwordModalSave').addEventListener('click', function(){
+  var value = passwordModalInput.value.trim();
+  if (!passwordModalTarget || !value) return;
+  var update = {};
+  update[passwordModalTarget] = value;
+  setDoc(rosterDocRef, { passwords: update }, { merge:true }).then(function(){
+    passwordBackdrop.classList.remove('show');
+    showToast('Password updated for ' + passwordModalTarget + '.');
+  }).catch(function(err){
+    console.error('Failed to update password:', err);
+    alert("Couldn't update the password — check your connection and try again.");
+  });
 });
 
 var rosterNameInput = document.getElementById('rosterNameInput');
