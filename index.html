@@ -273,6 +273,17 @@
     font-size:11px; color:var(--chalk-dim); border:1px dashed var(--line);
     padding:4px 9px; border-radius:20px;
   }
+  /* A pool's member order IS its team split — members[0]/[2] are one side,
+     members[1]/[3] the other (see reshufflePoolForVariety/swapWithinPool) —
+     so it always reads as "player & player vs player & player" and dragging
+     one chip onto another swaps their side/pairing. */
+  .pool-teams{ display:flex; align-items:stretch; gap:8px; }
+  .pool-team{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:0; }
+  .pool-team .chip, .pool-team .pool-slot-empty{ width:100%; justify-content:center; text-align:center; }
+  .pool-vs{
+    font-family:'Oswald',ui-sans-serif,system-ui,sans-serif; font-size:11px; font-weight:700;
+    letter-spacing:.5px; color:var(--chalk-dim); flex-shrink:0; align-self:center;
+  }
   .pool-hand{
     display:flex; align-items:center; gap:6px; justify-content:center;
     background:var(--ball); color:var(--ink); font-weight:700; font-size:12.5px;
@@ -928,6 +939,7 @@ import {
         state.pool.splice(state.pool.indexOf(incoming),1);
         p.members.push(incoming);
       }
+      reshufflePoolForVariety(p);
     });
     // A winners' pool (see finishMatch) is earmarked to go straight back to
     // the court it just won on, matching "winning team stays on court" —
@@ -975,6 +987,7 @@ import {
     var before = deepClone(state);
     state.pool.splice(idx,1);
     p.members.push(playerId);
+    reshufflePoolForVariety(p);
     commit('Added ' + nm(playerId) + ' to a swap pool', before);
   }
 
@@ -998,7 +1011,37 @@ import {
     var moved = movePlayerOutOfPool(fromPoolId, playerId);
     if (!moved) return;
     to.members.push(playerId);
+    reshufflePoolForVariety(to);
     commit('Moved ' + nm(playerId) + ' between pools', before);
+  }
+
+  // A pool's member order IS its team split: members[0]/[2] read as one
+  // side, members[1]/[3] the other (see renderPools + applyStartPoolOnCourt).
+  // Call this the moment a pool reaches 4 so it starts out on a fair,
+  // variety-minded split by default — the operator can still drag one chip
+  // onto another afterward to rearrange it by hand.
+  function reshufflePoolForVariety(p){
+    if (p.members.length!==4) return;
+    var partition = pickBestPartition(p.members);
+    p.members = [partition.teamA[0], partition.teamB[0], partition.teamA[1], partition.teamB[1]];
+  }
+
+  // Drag one pool member directly onto another IN THE SAME POOL to swap
+  // their positions — since position is what decides team assignment, this
+  // is how the operator manually re-pairs a foursome before it goes to a
+  // court, overriding whatever reshufflePoolForVariety picked by default.
+  function swapWithinPool(poolId, playerIdA, playerIdB){
+    if (playerIdA===playerIdB) return;
+    var p = state.pools.find(function(pp){ return pp.id===poolId; });
+    if (!p) return;
+    var idxA = p.members.indexOf(playerIdA);
+    var idxB = p.members.indexOf(playerIdB);
+    if (idxA===-1 || idxB===-1) return;
+    var before = deepClone(state);
+    var tmp = p.members[idxA];
+    p.members[idxA] = p.members[idxB];
+    p.members[idxB] = tmp;
+    commit('Swapped ' + nm(playerIdA) + ' and ' + nm(playerIdB) + ' in a pool', before);
   }
 
   // Drag a pool member back out to the waiting list — just relocates them
@@ -1036,10 +1079,15 @@ import {
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!p || !court || court.status!=='idle') return false;
     if (p.members.length===4){
-      var partition = pickBestPartition(p.members);
+      // The pool's own order already IS the team split shown on the board
+      // (members[0]/[2] one side, [1]/[3] the other) — honor whatever's
+      // displayed, whether that's the auto-picked default or something the
+      // operator rearranged by hand, rather than recomputing a fresh split.
+      var teamA = [p.members[0], p.members[2]];
+      var teamB = [p.members[1], p.members[3]];
       court.status = 'playing'; court.mode = 'doubles';
-      court.teamA = partition.teamA; court.teamB = partition.teamB;
-      bumpHistoryForMatch(partition.teamA, partition.teamB);
+      court.teamA = teamA; court.teamB = teamB;
+      bumpHistoryForMatch(teamA, teamB);
     } else if (p.members.length===2){
       court.status = 'playing'; court.mode = 'singles';
       court.teamA = [p.members[0]]; court.teamB = [p.members[1]];
@@ -1086,6 +1134,7 @@ import {
     a.members = a.members.concat(b.members);
     a.preferredCourtId = null;
     state.pools = state.pools.filter(function(p){ return p.id!==b.id; });
+    reshufflePoolForVariety(a);
     if (a.members.length===4){
       var court = lowestIdleCourt();
       if (court) applyStartPoolOnCourt(a.id, court.id);
@@ -1167,6 +1216,8 @@ import {
     if (courtPlayer) return { kind:'court-player', courtId: parseInt(courtPlayer.getAttribute('data-court'),10), playerId: courtPlayer.getAttribute('data-court-player') };
     var emptySlot = el.closest('.court-empty-slot');
     if (emptySlot) return { kind:'court-empty-slot', courtId: parseInt(emptySlot.getAttribute('data-court'),10), teamKey: emptySlot.getAttribute('data-team') };
+    var poolChip = el.closest('.pool-card .chip');
+    if (poolChip) return { kind:'forming-chip', poolId: poolChip.getAttribute('data-pool'), playerId: poolChip.getAttribute('data-player') };
     var poolCard = el.closest('.pool-card');
     if (poolCard) return { kind:'forming', poolId: poolCard.getAttribute('data-pool') };
     if (el.closest('.pool-new-placeholder')) return { kind:'new-pool' };
@@ -1220,6 +1271,14 @@ import {
     } else if (target.kind==='forming' && (srcType==='waiting' || (srcType==='forming' && drag.source.poolId!==target.poolId))){
       var poolEl = document.querySelector('.pool-card[data-pool="'+target.poolId+'"]');
       if (poolEl) poolEl.classList.add('drop-hover');
+    } else if (target.kind==='forming-chip' && srcType==='forming' && drag.source.poolId===target.poolId && drag.source.playerId!==target.playerId){
+      // Same pool, different chip: highlight the specific chip that would
+      // swap positions with the one being dragged.
+      var swapEl = document.querySelector('.chip[data-pool="'+target.poolId+'"][data-player="'+target.playerId+'"]');
+      if (swapEl) swapEl.classList.add('drop-hover');
+    } else if (target.kind==='forming-chip' && (srcType==='waiting' || srcType==='forming')){
+      var poolElChip = document.querySelector('.pool-card[data-pool="'+target.poolId+'"]');
+      if (poolElChip) poolElChip.classList.add('drop-hover');
     } else if (target.kind==='new-pool' && (srcType==='waiting' || srcType==='court-group')){
       var npEl = document.querySelector('.pool-new-placeholder');
       if (npEl) npEl.classList.add('drop-hover');
@@ -1249,7 +1308,9 @@ import {
     suppressClickUntil = Date.now() + 300;
     if (!target) return;
 
-    if (source.type==='waiting' && target.kind==='forming'){
+    if (source.type==='forming' && target.kind==='forming-chip' && target.poolId===source.poolId && target.playerId!==source.playerId){
+      swapWithinPool(source.poolId, source.playerId, target.playerId);
+    } else if (source.type==='waiting' && (target.kind==='forming' || target.kind==='forming-chip')){
       addToPool(target.poolId, source.playerId);
     } else if (source.type==='waiting' && target.kind==='new-pool'){
       createPoolWithPlayer(source.playerId);
@@ -1257,7 +1318,7 @@ import {
       swapCourtPlayer(target.courtId, target.playerId, source.playerId);
     } else if (source.type==='forming' && target.kind==='waiting'){
       removeFromFormingPool(source.poolId, source.playerId);
-    } else if (source.type==='forming' && target.kind==='forming' && target.poolId!==source.poolId){
+    } else if (source.type==='forming' && (target.kind==='forming' || target.kind==='forming-chip') && target.poolId!==source.poolId){
       moveBetweenPools(source.poolId, target.poolId, source.playerId);
     } else if (source.type==='forming' && target.kind==='court-player'){
       swapCourtPlayer(target.courtId, target.playerId, source.playerId);
@@ -1488,14 +1549,16 @@ import {
         kindBadge +
         (p.preferredCourtId!=null ? '<span class="pool-target">→ Court '+p.preferredCourtId+'</span>' : '') +
         '</div>';
-      html += '<div class="chips-row">';
-      p.members.forEach(function(pid){
-        html += '<span class="chip" data-pool="'+p.id+'" data-player="'+pid+'">'+nm(pid)+' <span class="x">✕</span></span>';
-      });
-      for (var i=p.members.length; i<4; i++){
-        html += '<span class="pool-slot-empty">drop here</span>';
+      function slotHtml(idx){
+        var pid = p.members[idx];
+        if (!pid) return '<span class="pool-slot-empty">drop here</span>';
+        return '<span class="chip" data-pool="'+p.id+'" data-player="'+pid+'">'+nm(pid)+' <span class="x">✕</span></span>';
       }
-      html += '</div>';
+      html += '<div class="pool-teams">' +
+        '<div class="pool-team">' + slotHtml(0) + slotHtml(2) + '</div>' +
+        '<div class="pool-vs">vs</div>' +
+        '<div class="pool-team">' + slotHtml(1) + slotHtml(3) + '</div>' +
+        '</div>';
       if (readyDoubles){
         html += '<div class="pool-hand" data-pool-handle="'+p.id+'">✋ Ready — drag to a court</div>';
       } else if (readySingles){
