@@ -319,7 +319,11 @@
     font-size:12px; font-weight:700; color:var(--ink); background:var(--ball);
     padding:8px 10px; border-radius:8px; margin-bottom:10px; text-align:center;
   }
-  .free-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .free-list{
+    display:flex; flex-wrap:wrap; gap:6px;
+    border:1px dashed var(--line); border-radius:var(--radius); padding:10px;
+    min-height:20px;
+  }
   .free-chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
     color:var(--chalk-dim); padding:5px 9px; border-radius:20px; display:flex; align-items:center; gap:6px;
