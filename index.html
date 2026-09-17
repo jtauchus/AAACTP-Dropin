@@ -423,6 +423,7 @@
       <button class="btn ghost icon-btn" id="undoBtn" title="Nothing to undo" disabled>↶</button>
       <button class="btn ghost icon-btn" id="redoBtn" title="Nothing to redo" disabled>↷</button>
       <button class="btn ghost icon-btn" id="historyBtn" title="Change history">🕘</button>
+      <button class="btn ghost icon-btn" id="alertsBtn" title="Enable sound alerts on this device">🔕</button>
       <button class="btn primary" id="addPlayerBtn">+ Add Me</button>
     </div>
     <div class="qr-links">
@@ -534,6 +535,56 @@ import {
     moveSourceCourtId: null,   // court currently picking a destination to move to
     selectedForSingles: []     // up to 2 free-agent ids picked to start a singles match
   };
+
+  // ---------- Sound alerts ----------
+  // Per-device, never synced: browsers block audio until a real tap unlocks
+  // it, and that unlock doesn't carry over to another device or a reload —
+  // an iPad left enabled with its volume up is what actually makes this
+  // audible across the courts, not anything the app can force from here.
+  var audioCtx = null;
+  var alertsEnabled = false;
+  var lastServeOutActive = null; // null = not known yet, so the first real render never fires a chime
+
+  function ensureAudioCtx(){
+    if (!audioCtx){
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playTone(freq, startTime, duration, gainPeak, waveType){
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = waveType || 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    var t = audioCtx.currentTime + startTime;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(gainPeak, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.start(t);
+    osc.stop(t + duration + 0.02);
+  }
+
+  // Both alerts stay high-pitched so they carry across the courts, but
+  // differ in rhythm and timbre (not just pitch) so people can learn to
+  // tell them apart by ear alone: a fast alternating trill for "the mode
+  // just changed," a bright two-note ding for "someone finished a match."
+  // Square waves carry further outdoors than sine, so gain is pulled back
+  // to compensate for how much louder/harsher they read at the same level.
+  function playModeChangeChime(){
+    if (!alertsEnabled || !audioCtx) return;
+    var freqs = [1760, 2349, 1760, 2349]; // A6 / D7 alternating
+    freqs.forEach(function(freq, i){ playTone(freq, i*0.1, 0.09, 0.35, 'square'); });
+  }
+  function playWinnerChime(){
+    if (!alertsEnabled || !audioCtx) return;
+    playTone(1760, 0, 0.16, 0.55, 'sine'); // A6
+    playTone(2349, 0.13, 0.3, 0.6, 'sine'); // D7
+  }
 
   var stateDocRef = doc(db, 'boards', 'friday');
 
@@ -1387,9 +1438,12 @@ import {
     if (!state.sessionStarted){
       banner.classList.remove('show');
       document.body.classList.remove('mode-red','mode-green');
+      lastServeOutActive = null; // presession has no mode yet — don't chime the moment a session starts
       return;
     }
     var uneven = serveOutActive();
+    if (lastServeOutActive!==null && lastServeOutActive!==uneven) playModeChangeChime();
+    lastServeOutActive = uneven;
     banner.classList.add('show');
     banner.classList.toggle('mode-red', uneven);
     banner.classList.toggle('mode-green', !uneven);
@@ -1781,6 +1835,21 @@ import {
     else if (e.key==='y' || (e.key==='z' && e.shiftKey)){ e.preventDefault(); redo(); }
   });
 
+  var alertsBtn = document.getElementById('alertsBtn');
+  alertsBtn.addEventListener('click', function(){
+    if (!alertsEnabled){
+      ensureAudioCtx();
+      alertsEnabled = true;
+      alertsBtn.textContent = '🔔';
+      alertsBtn.title = 'Sound alerts on for this device — tap to turn off';
+      playWinnerChime(); // immediate feedback that it actually worked
+    } else {
+      alertsEnabled = false;
+      alertsBtn.textContent = '🔕';
+      alertsBtn.title = 'Enable sound alerts on this device';
+    }
+  });
+
   // ---------- QR links (WhatsApp group, live board) ----------
   var qrBackdrop = document.getElementById('qrBackdrop');
   function qrImageUrl(targetUrl){
@@ -1865,10 +1934,23 @@ import {
       "Can't reach the board — check your connection.";
   });
 
+  // History entries are already synced + labeled for every action, so the
+  // "Finished match on Court X" label doubles as a ready-made, precise
+  // signal for the winner chime — reused rather than inventing a separate
+  // event, and it fires on every device watching, not just whichever one
+  // tapped Won.
+  var lastSeenHistoryTopId = undefined; // undefined = not known yet, so first snapshot never chimes
   onSnapshot(historyDocRef, function(snap){
     historyState = (snap.exists() && snap.data()) ? snap.data() : { undo: [], redo: [] };
     if (!historyState.undo) historyState.undo = [];
     if (!historyState.redo) historyState.redo = [];
+    var top = historyState.undo.length ? historyState.undo[historyState.undo.length-1] : null;
+    var topId = top ? top.id : null;
+    if (lastSeenHistoryTopId!==undefined && topId!==null && topId!==lastSeenHistoryTopId &&
+        top.label.indexOf('Finished match on Court')===0){
+      playWinnerChime();
+    }
+    lastSeenHistoryTopId = topId;
     renderHistoryUi();
   }, function(err){
     console.error('History sync error:', err);
