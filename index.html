@@ -296,10 +296,14 @@
     border:1px dashed var(--line); border-radius:var(--radius); padding:14px;
     text-align:center; font-size:12px; color:var(--chalk-dim); margin-bottom:10px;
   }
-  .pool-new-placeholder.drop-hover{ border-color:var(--ball); color:var(--chalk); }
+  .pool-new-placeholder.drop-hover{ border-color:var(--ball); color:var(--chalk); cursor:pointer; }
 
   .free-agents{ margin-top:4px; border-radius:10px; }
-  .free-agents.drop-hover{ outline:2px dashed var(--ball); outline-offset:6px; }
+  .free-agents.drop-hover{ outline:2px dashed var(--ball); outline-offset:6px; cursor:pointer; }
+  .move-here-hint{
+    font-size:12px; font-weight:700; color:var(--ink); background:var(--ball);
+    padding:8px 10px; border-radius:8px; margin-bottom:10px; text-align:center;
+  }
   .free-list{ display:flex; flex-wrap:wrap; gap:6px; }
   .free-chip{
     font-size:11.5px; background:var(--panel-2); border:1px solid var(--line);
@@ -452,6 +456,7 @@
       <div class="pool-scroll">
         <div id="poolsList"></div>
         <div class="free-agents">
+          <div class="move-here-hint" id="moveHereHint" style="display:none;"></div>
           <h2 style="margin-top:14px;">Waiting to play <span class="count-pill" id="freeCount">0</span></h2>
           <div class="free-list" id="freeList"></div>
           <div class="empty-note" id="freeEmptyNote"></div>
@@ -772,9 +777,10 @@ import {
     commit(label, before);
   }
 
-  // Drag a short-handed match's remaining players off the court entirely —
-  // either scattered back into the general waiting list, or kept together
-  // as a fresh swap-pool group.
+  // Break a match apart back into the waiting list — either dragging a
+  // short-handed match's remaining players off (the ✋ handle), or tapping
+  // the highlighted waiting list while "Move to…" is active for a court
+  // that just doesn't have another open court to go to.
   function breakUpCourtToWaiting(courtId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -785,10 +791,13 @@ import {
       state.pool.push(pid);
     });
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
+    localUi.moveSourceCourtId = null;
     recompute();
     commit(label, before);
   }
 
+  // Same idea, kept together as one new swap-pool group instead of
+  // scattering back into the plain waiting list.
   function breakUpCourtToNewPool(courtId){
     var court = state.courts.find(function(c){ return c.id===courtId; });
     if (!court || court.status!=='playing') return;
@@ -798,6 +807,7 @@ import {
     var label = 'Grouped Court ' + courtId + ' match into a new pool';
     state.pools.push({ id: uid('pool'), members: members, preferredCourtId: null });
     court.status='idle'; court.mode=null; court.teamA=[]; court.teamB=[];
+    localUi.moveSourceCourtId = null;
     recompute();
     commit(label, before);
   }
@@ -1574,9 +1584,20 @@ import {
 
     var newEl = document.createElement('div');
     newEl.className = 'pool-new-placeholder';
-    newEl.textContent = state.pools.length===0
-      ? 'Drag a waiting player here to start a group'
-      : 'Drag a waiting player here to start another group';
+    if (localUi.moveSourceCourtId!==null){
+      // "Move to…" is active for a court and there's nowhere open to move
+      // it to — highlight this as an alternative: keep the match together
+      // as its own pool instead.
+      newEl.classList.add('drop-hover');
+      newEl.textContent = 'Tap to move Court ' + localUi.moveSourceCourtId + '\'s match here as a new pool';
+      newEl.addEventListener('click', function(){
+        breakUpCourtToNewPool(localUi.moveSourceCourtId);
+      });
+    } else {
+      newEl.textContent = state.pools.length===0
+        ? 'Drag a waiting player here to start a group'
+        : 'Drag a waiting player here to start another group';
+    }
     list.appendChild(newEl);
 
     list.querySelectorAll('.pool-card .chip').forEach(function(chip){
@@ -1606,6 +1627,21 @@ import {
     var hint = document.getElementById('singlesHint');
     var singlesBtn = document.getElementById('startSinglesBtn');
     document.getElementById('freeCount').textContent = state.pool.length;
+
+    // "Move to…" is active for a court with nowhere open to move it to —
+    // highlight the waiting list as an alternative: scatter the match back
+    // into it instead.
+    var freeAgentsEl = document.querySelector('.free-agents');
+    var moveHint = document.getElementById('moveHereHint');
+    if (localUi.moveSourceCourtId!==null){
+      freeAgentsEl.classList.add('drop-hover');
+      moveHint.style.display = 'block';
+      moveHint.textContent = 'Tap to send Court ' + localUi.moveSourceCourtId + '\'s match here';
+    } else {
+      freeAgentsEl.classList.remove('drop-hover');
+      moveHint.style.display = 'none';
+    }
+
     listEl.innerHTML = '';
     if (state.pool.length===0){
       note.textContent = '';
@@ -1797,6 +1833,15 @@ import {
     if (ctx.type==='pool') removeFreeAgent(pid);
     else if (ctx.type==='forming') removeFormingPoolMemberEntirely(ctx.poolId, pid);
     else if (ctx.type==='court') removePlayerFromCourt(ctx.courtId, pid);
+  });
+
+  // Static element, never recreated — bind once, guarded so it's a no-op
+  // unless "Move to…" is active. Excludes clicks on chips/buttons inside
+  // (removing a player, selecting for singles) so those keep working as-is.
+  document.querySelector('.free-agents').addEventListener('click', function(e){
+    if (localUi.moveSourceCourtId===null) return;
+    if (e.target.closest('.free-chip') || e.target.closest('button')) return;
+    breakUpCourtToWaiting(localUi.moveSourceCourtId);
   });
 
   // ---------- Init ----------
