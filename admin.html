@@ -408,7 +408,9 @@ function renderRoster(){
       delete rosterChecked[name];
       var photoUpdate = {};
       photoUpdate[name] = deleteField();
-      setDoc(rosterDocRef, { names: arrayRemove(name), photos: photoUpdate }, { merge:true }).catch(function(err){
+      var fullUpdate = {};
+      fullUpdate[name] = deleteField();
+      setDoc(rosterDocRef, { names: arrayRemove(name), photos: photoUpdate, photosFull: fullUpdate }, { merge:true }).catch(function(err){
         console.error('Failed to remove regular:', err);
       });
     });
@@ -452,8 +454,9 @@ function renderOtherProfiles(){
     x.addEventListener('click', function(){
       var name = x.getAttribute('data-other-remove');
       var photoUpdate = {}; photoUpdate[name] = deleteField();
+      var fullUpdate = {}; fullUpdate[name] = deleteField();
       var pwUpdate = {}; pwUpdate[name] = deleteField();
-      setDoc(rosterDocRef, { photos: photoUpdate, passwords: pwUpdate }, { merge:true }).then(function(){
+      setDoc(rosterDocRef, { photos: photoUpdate, photosFull: fullUpdate, passwords: pwUpdate }, { merge:true }).then(function(){
         showToast('Removed profile for ' + name + '.');
       }).catch(function(err){
         console.error('Failed to remove profile:', err);
@@ -466,7 +469,9 @@ function renderOtherProfiles(){
 function clearPhoto(name){
   var update = {};
   update[name] = deleteField();
-  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+  var fullUpdate = {};
+  fullUpdate[name] = deleteField();
+  setDoc(rosterDocRef, { photos: update, photosFull: fullUpdate }, { merge:true }).then(function(){
     showToast('Photo cleared for ' + name + '.');
   }).catch(function(err){
     console.error('Failed to clear photo:', err);

@@ -177,7 +177,8 @@ var DEFAULT_PASSWORD = '12345678';
 // the URL from index.html's player menu, not a name you pick from a list,
 // so this page never has to show anyone else's name.
 var selectedName = new URLSearchParams(location.search).get('name');
-var pendingDataUrl = null; // a newly-picked photo not yet saved
+var pendingDataUrl = null; // the small cropped avatar, not yet saved
+var pendingFullDataUrl = null; // the larger uncropped version, not yet saved
 
 // Faces stay recognizable at this size even though the board only ever
 // displays them tiny (~18px) — the extra resolution is headroom for this
@@ -186,6 +187,12 @@ var pendingDataUrl = null; // a newly-picked photo not yet saved
 // directly trades off against how many people fit.
 var PHOTO_SIZE = 96;
 var JPEG_QUALITY = 0.65;
+// A second, larger copy of the whole picked photo (not just the cropped
+// square) so hovering an avatar on the board can show real context instead
+// of just a blown-up version of the tiny crop. Bigger than the avatar but
+// still capped, for the same 1MB/doc reason as above.
+var FULL_MAX_SIZE = 320;
+var FULL_JPEG_QUALITY = 0.6;
 
 function showToast(message){
   var toast = document.getElementById('toast');
@@ -350,6 +357,17 @@ document.getElementById('cropConfirmBtn').addEventListener('click', function(){
   canvas.width = PHOTO_SIZE; canvas.height = PHOTO_SIZE;
   canvas.getContext('2d').drawImage(cropImg, sx, sy, sSide, sSide, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
   pendingDataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+
+  // The whole original photo (not the crop selection), just downsized —
+  // this is what the board's hover preview shows.
+  var fullScale = Math.min(1, FULL_MAX_SIZE / Math.max(cropState.naturalW, cropState.naturalH));
+  var fullW = Math.round(cropState.naturalW * fullScale);
+  var fullH = Math.round(cropState.naturalH * fullScale);
+  var fullCanvas = document.createElement('canvas');
+  fullCanvas.width = fullW; fullCanvas.height = fullH;
+  fullCanvas.getContext('2d').drawImage(cropImg, 0, 0, fullW, fullH);
+  pendingFullDataUrl = fullCanvas.toDataURL('image/jpeg', FULL_JPEG_QUALITY);
+
   renderPreview(pendingDataUrl);
   saveBtn.disabled = false;
   closeCropUI();
@@ -375,10 +393,13 @@ saveBtn.addEventListener('click', function(){
   if (!selectedName || !pendingDataUrl) return;
   var update = {};
   update[selectedName] = pendingDataUrl;
+  var fullUpdate = {};
+  fullUpdate[selectedName] = pendingFullDataUrl;
   saveBtn.disabled = true;
-  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+  setDoc(rosterDocRef, { photos: update, photosFull: fullUpdate }, { merge:true }).then(function(){
     showToast('Photo saved.');
     pendingDataUrl = null;
+    pendingFullDataUrl = null;
   }).catch(function(err){
     console.error('Failed to save photo:', err);
     alert("Couldn't save your photo — check your connection and try again.");
@@ -390,9 +411,12 @@ removeBtn.addEventListener('click', function(){
   if (!selectedName) return;
   var update = {};
   update[selectedName] = deleteField();
-  setDoc(rosterDocRef, { photos: update }, { merge:true }).then(function(){
+  var fullUpdate = {};
+  fullUpdate[selectedName] = deleteField();
+  setDoc(rosterDocRef, { photos: update, photosFull: fullUpdate }, { merge:true }).then(function(){
     showToast('Photo removed.');
     pendingDataUrl = null;
+    pendingFullDataUrl = null;
   }).catch(function(err){
     console.error('Failed to remove photo:', err);
     alert("Couldn't remove your photo — check your connection and try again.");

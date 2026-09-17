@@ -198,7 +198,8 @@
   }
   .avatar-preview{
     position:fixed; z-index:300; pointer-events:none;
-    width:160px; height:160px; border-radius:50%; object-fit:cover;
+    max-width:220px; max-height:220px; width:auto; height:auto;
+    display:block; border-radius:12px; object-fit:contain;
     border:3px solid var(--ball); box-shadow:0 6px 20px rgba(0,0,0,.5);
     opacity:0; transform:scale(.85); transition:opacity .12s ease, transform .12s ease;
     background:var(--panel-2);
@@ -546,6 +547,7 @@ import {
   // doc (roster/regulars) with its own lifecycle, separate from the weekly
   // board reset.
   var rosterPhotos = {};
+  var rosterPhotosFull = {}; // larger, uncropped copies — used only by the hover preview
   var rosterNames = []; // for the "+ Add Me" new-vs-regular lookup hint only
 
   // ---------- Sound alerts ----------
@@ -1493,7 +1495,9 @@ import {
   function avatarHtml(pid){
     var p = state.players[pid];
     var photo = p && rosterPhotos[p.name];
-    return photo ? '<img class="avatar" src="'+photo+'" alt="">' : '';
+    if (!photo) return '';
+    var full = rosterPhotosFull[p.name];
+    return '<img class="avatar" src="'+photo+'"' + (full ? ' data-full="'+full+'"' : '') + ' alt="">';
   }
   // Waiting-list chips already use a plain click to toggle singles selection
   // (tap two names to start a match), so the avatar is its own always-present
@@ -1502,9 +1506,9 @@ import {
   function freeAgentAvatarHtml(pid){
     var p = state.players[pid];
     var photo = p && rosterPhotos[p.name];
-    return photo
-      ? '<img class="avatar" data-avatar="'+pid+'" src="'+photo+'" alt="">'
-      : '<span class="avatar avatar-placeholder" data-avatar="'+pid+'"></span>';
+    if (!photo) return '<span class="avatar avatar-placeholder" data-avatar="'+pid+'"></span>';
+    var full = rosterPhotosFull[p.name];
+    return '<img class="avatar" data-avatar="'+pid+'" src="'+photo+'"' + (full ? ' data-full="'+full+'"' : '') + ' alt="">';
   }
   function courtPlayerSpan(pid, courtId, teamKey){
     if (!pid) return '<b class="court-empty-slot" data-court="'+courtId+'" data-team="'+teamKey+'">drop here</b>';
@@ -2010,11 +2014,14 @@ import {
   // repositioned per-hover rather than one preview per chip, since chips get
   // torn down and rebuilt on every render. Only real photos qualify: the
   // waiting-list placeholder (no photo yet) is a <span>, not an <img>, so it
-  // never matches and never shows an empty preview.
+  // never matches and never shows an empty preview. Prefers the larger
+  // uncropped photo (data-full) so hovering shows real context, not just a
+  // blown-up version of the tiny cropped avatar; falls back to the avatar's
+  // own small src for photos saved before that full copy existed.
   var avatarPreview = document.getElementById('avatarPreview');
   function positionAvatarPreview(el){
     var rect = el.getBoundingClientRect();
-    var size = 160, gap = 12, margin = 8;
+    var size = 220, gap = 12, margin = 8; // matches .avatar-preview's max-width/height
     var left = rect.left + rect.width/2 - size/2;
     left = Math.max(margin, Math.min(left, window.innerWidth - size - margin));
     var top = rect.top - size - gap;
@@ -2025,7 +2032,7 @@ import {
   document.addEventListener('mouseover', function(e){
     var el = e.target.closest('img.avatar');
     if (!el) return;
-    avatarPreview.src = el.src;
+    avatarPreview.src = el.getAttribute('data-full') || el.src;
     positionAvatarPreview(el);
     avatarPreview.classList.add('show');
   });
@@ -2061,6 +2068,7 @@ import {
   onSnapshot(rosterDocRef, function(snap){
     var data = snap.exists() ? snap.data() : {};
     rosterPhotos = data.photos || {};
+    rosterPhotosFull = data.photosFull || {};
     rosterNames = data.names || [];
     renderAll();
     renderNameLookupHint();
