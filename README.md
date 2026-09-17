@@ -30,6 +30,12 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   dragging waiting players into a pool (or dragging a pool member back out).
   A full pool gets a "Ready — drag to a court" hand icon and can be dropped
   on any open court to start the match there.
+- **A pool reads as team vs. team**, e.g. "Alex & Jamie vs Morgan & Casey" —
+  not just four names in a row. The engine picks that initial split to
+  minimize repeat partners/opponents, but it's just a starting point: drag
+  one pool member directly onto another to swap their positions (and so
+  their side), so the operator can re-pair a foursome by hand before it goes
+  to a court. Whatever's shown is exactly what starts on court.
 - **Winners stay, split, and get new partners; losers go back in line** —
   matching the [format's own rules](http://www.aaacta.org/Drop_In/Format.html):
   when a match finishes, the losing team returns to the plain waiting list,
