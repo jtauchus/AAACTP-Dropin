@@ -88,6 +88,16 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   board QR") pop up a scannable QR code (generated via api.qrserver.com)
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
+- **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
+  on high-pitched chimes for this device — a square-wave trill when the
+  board flips between normal and Server-out mode, and a sine-wave ding
+  whenever any court finishes a match. The two are deliberately different
+  textures, not just volume, so people learn to tell them apart by ear.
+  Meant for a device with the volume maxed (the courtside iPad, or a
+  phone) so the whole area can hear a change without watching the screen.
+  It's per-device and doesn't sync or persist across a reload — browsers
+  only allow sound after a real tap unlocks it, so re-enable it each time
+  the page loads.
 
 ## iPad kiosk mode
 
