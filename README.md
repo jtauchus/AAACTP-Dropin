@@ -96,14 +96,17 @@ roster of regulars that can be bulk-added to a night's sign-up list in one go.
   board QR") pop up a scannable QR code (generated via api.qrserver.com)
   for the club's WhatsApp invite link and for this board's own URL, each
   with a Close button.
-- **Profile photos**: "👤 My photo" in the header opens `profile.html`,
-  where anyone on the regulars roster can find their own name and add a
-  photo from their camera or library. It's resized and center-cropped to a
-  small square entirely on-device before saving — nothing but that final
-  thumbnail ever leaves the phone — and then shows up as a small round
-  avatar next to that name anywhere it appears on the board (waiting list,
-  swap pool, courts). Matched to a checked-in player by exact name, since
-  there's no login system tying the two together.
+- **Profile photos**: tap any name on the board (waiting list, swap pool,
+  or a court) and choose "📷 Profile photo" to open `profile.html` scoped
+  to just that person — there's no browsable list of everyone else's
+  names, on purpose. From there, add a photo from your camera or library;
+  it's resized and center-cropped to a small square entirely on-device
+  before saving — nothing but that final thumbnail ever leaves the
+  phone — and then shows up as a small round avatar next to that name
+  anywhere it appears on the board. Matched by exact name, since there's
+  no login system tying a photo to a person; the "+ Add Me" box hints
+  whether what you typed matches an existing regular ("Welcome back") or
+  reads as a new name, to help everyone spell their own name consistently.
 - **Sound alerts**: tap the 🔕 button in the header (it becomes 🔔) to turn
   on alerts for this device. Each alert is a short tuned tone burst — a
   different one per event, so it hints at what's coming before anyone's
@@ -173,9 +176,10 @@ Each Friday:
   standalone, and the UI snippets in it are hand-built to match `index.html`'s
   own CSS rather than live screenshots, so keep them in sync if the board's
   look changes.
-- `profile.html` — public, unlocked page where any regular can pick their
-  own name from the roster and add/replace/remove their photo
-  (`roster/regulars`'s new `photos` map, keyed by name). Deliberately kept
+- `profile.html` — public, unlocked page for adding/replacing/removing a
+  profile photo (`roster/regulars`'s `photos` map, keyed by name). Only
+  reachable via `?name=` from the board's own per-player menu — never
+  shows a name other than the one it was opened for. Deliberately kept
   separate from `admin.html`'s passphrase gate — this is a self-service
   page for players, not an admin function.
 - `firebase-init.js` — shared Firebase/Firestore setup used by all pages.

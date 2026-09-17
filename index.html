@@ -354,6 +354,9 @@
     background:var(--panel); color:var(--chalk); font-size:14px; margin-bottom:12px;
     flex-shrink:0;
   }
+  .name-lookup-hint{ font-size:11.5px; min-height:14px; margin:-8px 0 12px; flex-shrink:0; }
+  .name-lookup-hint.found{ color:var(--ball); }
+  .name-lookup-hint.new{ color:var(--chalk-dim); }
   .modal-actions{ display:flex; gap:8px; justify-content:flex-end; flex-shrink:0; }
   .modal.wide{ width:min(440px, 92vw); }
   #historyList{ overflow-y:auto; min-height:0; flex:1; }
@@ -425,7 +428,6 @@
       <button class="btn ghost qr-link-btn" id="whatsappQrBtn">💬 WhatsApp group QR</button>
       <button class="btn ghost qr-link-btn" id="liveBoardQrBtn">🎾 Live board QR</button>
       <a class="btn ghost qr-link-btn" href="how-it-works.html" target="_blank" rel="noopener">📖 How it works</a>
-      <a class="btn ghost qr-link-btn" href="profile.html" target="_blank" rel="noopener">👤 My photo</a>
     </div>
   </header>
 
@@ -457,6 +459,7 @@
     <h3 id="addModalTitle">Add a player</h3>
     <p id="addModalDesc">For anyone without a phone — type their name and they'll join the waiting list.</p>
     <input type="text" id="nameInput" placeholder="Player name" maxlength="24" />
+    <div class="name-lookup-hint" id="nameLookupHint"></div>
     <div class="modal-actions">
       <button class="btn ghost" id="cancelAdd">Cancel</button>
       <button class="btn primary" id="confirmAdd">Add</button>
@@ -469,6 +472,8 @@
     <h3 id="playerMenuName">Player</h3>
     <p>What would you like to do?</p>
     <button class="btn primary" id="playerMenuToWaiting" style="display:none; width:100%; margin-bottom:10px;">Move to waiting</button>
+    <a class="btn ghost" id="playerMenuProfile" target="_blank" rel="noopener"
+      style="display:block; width:100%; margin-bottom:10px; text-align:center; text-decoration:none; box-sizing:border-box;">📷 Profile photo</a>
     <div class="modal-actions">
       <button class="btn ghost" id="playerMenuCancel">Cancel</button>
       <button class="btn danger" id="playerMenuRemove">Remove from play</button>
@@ -523,6 +528,7 @@ import {
   // doc (roster/regulars) with its own lifecycle, separate from the weekly
   // board reset.
   var rosterPhotos = {};
+  var rosterNames = []; // for the "+ Add Me" new-vs-regular lookup hint only
 
   // ---------- Sound alerts ----------
   // Per-device, never synced: browsers block audio until a real tap unlocks
@@ -1814,8 +1820,32 @@ import {
   // ---------- Modal wiring ----------
   var backdrop = document.getElementById('modalBackdrop');
   var nameInput = document.getElementById('nameInput');
+  var nameLookupHintEl = document.getElementById('nameLookupHint');
+  // A live lookup against the regulars roster as you type — not a
+  // validation gate (anyone can still check in under any name), just a
+  // hint so a regular sees their name matched (and, since photos are
+  // keyed by exact name, learns to type it consistently) vs. a first-timer
+  // seeing they're starting fresh.
+  function renderNameLookupHint(){
+    var typed = nameInput.value.trim();
+    if (!typed){
+      nameLookupHintEl.textContent = '';
+      nameLookupHintEl.className = 'name-lookup-hint';
+      return;
+    }
+    var match = rosterNames.find(function(n){ return n.toLowerCase()===typed.toLowerCase(); });
+    if (match){
+      nameLookupHintEl.textContent = '✓ Welcome back, ' + match;
+      nameLookupHintEl.className = 'name-lookup-hint found';
+    } else {
+      nameLookupHintEl.textContent = 'New player';
+      nameLookupHintEl.className = 'name-lookup-hint new';
+    }
+  }
   function openModal(){
-    backdrop.classList.add('show'); nameInput.value=''; setTimeout(function(){nameInput.focus();},50);
+    backdrop.classList.add('show'); nameInput.value='';
+    renderNameLookupHint();
+    setTimeout(function(){nameInput.focus();},50);
   }
   function closeModal(){ backdrop.classList.remove('show'); }
   document.getElementById('addPlayerBtn').addEventListener('click', openModal);
@@ -1824,6 +1854,7 @@ import {
     addPlayer(nameInput.value.trim());
     closeModal();
   });
+  nameInput.addEventListener('input', renderNameLookupHint);
   nameInput.addEventListener('keydown', function(e){
     if (e.key==='Enter' || e.keyCode===13 || e.which===13){
       e.preventDefault();
@@ -1902,11 +1933,13 @@ import {
   var pendingPlayerAction = null;
 
   var playerMenuToWaitingBtn = document.getElementById('playerMenuToWaiting');
+  var playerMenuProfileLink = document.getElementById('playerMenuProfile');
 
   function openPlayerMenu(playerId, context){
     pendingPlayerAction = { playerId: playerId, context: context };
     playerMenuNameEl.textContent = nm(playerId);
     playerMenuToWaitingBtn.style.display = (context.type==='court') ? 'block' : 'none';
+    playerMenuProfileLink.href = 'profile.html?name=' + encodeURIComponent(nm(playerId));
     playerMenuBackdrop.classList.add('show');
   }
   function closePlayerMenu(){
@@ -1914,6 +1947,7 @@ import {
     pendingPlayerAction = null;
   }
   document.getElementById('playerMenuCancel').addEventListener('click', closePlayerMenu);
+  playerMenuProfileLink.addEventListener('click', closePlayerMenu);
   playerMenuToWaitingBtn.addEventListener('click', function(){
     if (!pendingPlayerAction) return;
     var pid = pendingPlayerAction.playerId, ctx = pendingPlayerAction.context;
@@ -1964,8 +1998,11 @@ import {
   // board (survives resets), so it's its own listener rather than folded
   // into stateDocRef above.
   onSnapshot(rosterDocRef, function(snap){
-    rosterPhotos = (snap.exists() && snap.data().photos) ? snap.data().photos : {};
+    var data = snap.exists() ? snap.data() : {};
+    rosterPhotos = data.photos || {};
+    rosterNames = data.names || [];
     renderAll();
+    renderNameLookupHint();
   }, function(err){
     console.error('Roster photo sync error:', err);
   });

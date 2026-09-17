@@ -31,7 +31,7 @@
     -webkit-font-smoothing:antialiased;
   }
   h1,h2,h3{ font-family:'Oswald',ui-sans-serif,system-ui,sans-serif; }
-  .wrap{ max-width:480px; margin:0 auto; padding:28px 20px 60px; }
+  .wrap{ max-width:420px; margin:0 auto; padding:28px 20px 60px; }
   header{ margin-bottom:22px; }
   header h1{ margin:0 0 4px; font-size:22px; font-weight:600; }
   header .sub{ font-size:12.5px; color:var(--chalk-dim); line-height:1.5; }
@@ -39,12 +39,7 @@
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
     padding:18px; margin-bottom:18px;
   }
-  .card h2{ margin:0 0 12px; font-size:15px; font-weight:600; }
   p{ font-size:13px; color:var(--chalk-dim); line-height:1.6; margin:0 0 12px; }
-  input[type="text"]{
-    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line);
-    background:var(--panel-3); color:var(--chalk); font-size:14px; font-family:inherit;
-  }
   .btn{
     border:1px solid var(--line); background:var(--panel-3); color:var(--chalk);
     padding:12px 18px; border-radius:8px; font-size:14px; font-weight:600;
@@ -53,42 +48,24 @@
   .btn:active{ transform:translateY(1px); }
   .btn.primary{ background:var(--ball); color:var(--ink); border-color:var(--ball); }
   .btn.danger{ background:transparent; color:var(--danger); border-color:var(--danger); }
-  .btn.ghost{ background:transparent; color:var(--chalk-dim); }
   .btn:disabled{ opacity:.5; cursor:default; }
   .actions{ display:flex; gap:10px; margin-top:12px; }
   .actions .btn{ flex:1; }
 
-  .name-list{
-    display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto;
-    margin-top:12px; border-top:1px solid var(--line);
-  }
-  .name-row{
-    display:flex; align-items:center; gap:10px; padding:10px 4px;
-    border-bottom:1px solid var(--line); font-size:14px; cursor:pointer;
-  }
-  .name-row:active{ background:var(--panel-3); }
-  .name-row.selected{ color:var(--ball); font-weight:600; }
-  .name-row .thumb{
-    width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0;
-    background:var(--panel-3); border:1px solid var(--line);
-  }
-  .name-empty{ font-size:12.5px; color:var(--chalk-dim); padding:10px 4px; }
-
   .editor{ text-align:center; }
-  .editor .selected-name{ font-size:16px; font-weight:600; margin-bottom:14px; }
+  .editor .selected-name{ font-size:18px; font-weight:600; margin-bottom:14px; }
   .photo-preview{
-    width:140px; height:140px; border-radius:50%; object-fit:cover;
+    width:150px; height:150px; border-radius:50%; object-fit:cover;
     background:var(--panel-3); border:2px solid var(--line);
     margin:0 auto 16px; display:block;
   }
   .photo-preview.placeholder{
     display:flex; align-items:center; justify-content:center;
-    font-size:44px; color:var(--chalk-dim);
+    font-size:46px; color:var(--chalk-dim);
   }
   .file-input{ display:none; }
   .hide{ display:none !important; }
 
-  .loading-text{ color:var(--chalk-dim); font-size:13px; }
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
     background:var(--ball); color:var(--ink); font-weight:600; font-size:13px;
@@ -102,24 +79,18 @@
 <div class="wrap">
   <header>
     <h1>My Profile Photo</h1>
-    <div class="sub">Find your name below and add a photo from your camera or
-      library. It shows up next to your name on the board — small, so pick
-      something that reads clearly even tiny: a close-up face works best.</div>
   </header>
 
-  <div class="card">
-    <h2>Find your name</h2>
-    <input type="text" id="searchInput" placeholder="Start typing your name…" autocomplete="off">
-    <div class="name-list" id="nameList"></div>
-    <div class="name-empty" id="notListedNote" style="display:none;">
-      Not finding your name? You need to be on the regulars roster first —
-      ask an admin to add you in the Drop-In Admin page.
-    </div>
+  <div class="card" id="noNameCard">
+    <p>This page only works opened from your own name on the board: tap
+      your name wherever it shows up (waiting list, swap pool, or a court),
+      then choose "📷 Profile photo" from the menu.</p>
   </div>
 
   <div class="card editor hide" id="editorCard">
-    <h2>Your photo</h2>
     <div class="selected-name" id="selectedNameLabel"></div>
+    <p>Add a photo from your camera or library. It shows up next to your
+      name on the board — small, so a close-up face reads best.</p>
     <img class="photo-preview hide" id="photoPreviewImg" alt="">
     <div class="photo-preview placeholder" id="photoPlaceholder">🎾</div>
     <input type="file" class="file-input" id="photoInput" accept="image/*" capture="user">
@@ -140,17 +111,19 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 var rosterDocRef = doc(db, 'roster', 'regulars');
-var rosterNames = [];
 var rosterPhotos = {};
-var selectedName = null;
+// Whoever opened this page from their own name on the board — carried via
+// the URL from index.html's player menu, not a name you pick from a list,
+// so this page never has to show anyone else's name.
+var selectedName = new URLSearchParams(location.search).get('name');
 var pendingDataUrl = null; // a newly-picked photo not yet saved
 
 // Faces stay recognizable at this size even though the board only ever
 // displays them tiny (~18px) — the extra resolution is headroom for this
 // page's own bigger preview. Square crop centers on the source image since
-// there's no manual crop control; keep this small — every regular's photo
-// lives inline in the one shared roster document (Firestore's 1MB/doc
-// cap), so scale here directly trades off against how many people fit.
+// there's no manual crop control; keep this small — every photo lives
+// inline in the one shared roster document (Firestore's 1MB/doc cap), so
+// scale here directly trades off against how many people fit.
 var PHOTO_SIZE = 96;
 var JPEG_QUALITY = 0.65;
 
@@ -161,29 +134,7 @@ function showToast(message){
   setTimeout(function(){ toast.classList.remove('show'); }, 2500);
 }
 
-var searchInput = document.getElementById('searchInput');
-var nameListEl = document.getElementById('nameList');
-var notListedNote = document.getElementById('notListedNote');
-
-function renderNameList(){
-  var query = searchInput.value.trim().toLowerCase();
-  var matches = rosterNames
-    .filter(function(n){ return n.toLowerCase().indexOf(query) > -1; })
-    .sort(function(a,b){ return a.localeCompare(b); });
-  nameListEl.innerHTML = '';
-  matches.forEach(function(name){
-    var row = document.createElement('div');
-    row.className = 'name-row' + (name===selectedName ? ' selected' : '');
-    var photo = rosterPhotos[name];
-    row.innerHTML = (photo ? '<img class="thumb" src="'+photo+'">' : '<span class="thumb"></span>') +
-      '<span>'+name+'</span>';
-    row.addEventListener('click', function(){ selectName(name); });
-    nameListEl.appendChild(row);
-  });
-  notListedNote.style.display = (query && matches.length===0) ? 'block' : 'none';
-}
-searchInput.addEventListener('input', renderNameList);
-
+var noNameCard = document.getElementById('noNameCard');
 var editorCard = document.getElementById('editorCard');
 var selectedNameLabel = document.getElementById('selectedNameLabel');
 var photoPreviewImg = document.getElementById('photoPreviewImg');
@@ -191,16 +142,10 @@ var photoPlaceholder = document.getElementById('photoPlaceholder');
 var saveBtn = document.getElementById('saveBtn');
 var removeBtn = document.getElementById('removeBtn');
 
-function selectName(name){
-  selectedName = name;
-  pendingDataUrl = null;
-  selectedNameLabel.textContent = name;
+if (selectedName){
+  noNameCard.classList.add('hide');
   editorCard.classList.remove('hide');
-  renderPreview(rosterPhotos[name] || null);
-  saveBtn.disabled = true;
-  removeBtn.style.display = rosterPhotos[name] ? 'block' : 'none';
-  renderNameList();
-  editorCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  selectedNameLabel.textContent = selectedName;
 }
 
 function renderPreview(dataUrl){
@@ -285,21 +230,17 @@ removeBtn.addEventListener('click', function(){
   });
 });
 
-onSnapshot(rosterDocRef, function(snap){
-  var data = snap.exists() ? snap.data() : {};
-  rosterNames = data.names || [];
-  rosterPhotos = data.photos || {};
-  renderNameList();
-  if (selectedName){
+if (selectedName){
+  onSnapshot(rosterDocRef, function(snap){
+    rosterPhotos = (snap.exists() && snap.data().photos) ? snap.data().photos : {};
+    removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
     // Own write echoing back (or another device's change to the same
     // person) — refresh the preview unless there's an unsaved pick pending.
-    selectedNameLabel.textContent = selectedName;
-    removeBtn.style.display = rosterPhotos[selectedName] ? 'block' : 'none';
     if (!pendingDataUrl) renderPreview(rosterPhotos[selectedName] || null);
-  }
-}, function(err){
-  console.error('Roster sync error:', err);
-});
+  }, function(err){
+    console.error('Roster sync error:', err);
+  });
+}
 </script>
 </body>
 </html>
