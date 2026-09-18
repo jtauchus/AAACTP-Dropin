@@ -2031,6 +2031,11 @@ import {
   // uncropped photo (data-full) so hovering shows real context, not just a
   // blown-up version of the tiny cropped avatar; falls back to the avatar's
   // own small src for photos saved before that full copy existed.
+  //
+  // Pointer events (not mouseover/mouseout) so this can check pointerType:
+  // a tap on a touchscreen fires a synthetic mouseover with no matching
+  // mouseout, which left the preview stuck open forever on phones —
+  // filtering to pointerType==='mouse' skips touch (and pen) entirely.
   var avatarPreview = document.getElementById('avatarPreview');
   function positionAvatarPreview(el){
     var rect = el.getBoundingClientRect();
@@ -2042,14 +2047,16 @@ import {
     avatarPreview.style.left = left + 'px';
     avatarPreview.style.top = top + 'px';
   }
-  document.addEventListener('mouseover', function(e){
+  document.addEventListener('pointerover', function(e){
+    if (e.pointerType !== 'mouse') return;
     var el = e.target.closest('img.avatar');
     if (!el) return;
     avatarPreview.src = el.getAttribute('data-full') || el.src;
     positionAvatarPreview(el);
     avatarPreview.classList.add('show');
   });
-  document.addEventListener('mouseout', function(e){
+  document.addEventListener('pointerout', function(e){
+    if (e.pointerType !== 'mouse') return;
     if (e.target.closest('img.avatar')) avatarPreview.classList.remove('show');
   });
 
