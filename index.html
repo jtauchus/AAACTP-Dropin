@@ -2032,10 +2032,14 @@ import {
   // blown-up version of the tiny cropped avatar; falls back to the avatar's
   // own small src for photos saved before that full copy existed.
   //
-  // Pointer events (not mouseover/mouseout) so this can check pointerType:
-  // a tap on a touchscreen fires a synthetic mouseover with no matching
-  // mouseout, which left the preview stuck open forever on phones —
-  // filtering to pointerType==='mouse' skips touch (and pen) entirely.
+  // Checking pointerType==='mouse' alone wasn't enough — iOS Safari's
+  // touch-vs-mouse pointerType reporting on tap is unreliable, so a tap
+  // could still slip through and open it with nothing to ever close it.
+  // Two layers instead: only attach the hover listeners at all when the
+  // device reports genuine hover+fine-pointer support (skips touch-primary
+  // devices outright, so a tap never reaches this code); and a touchstart
+  // safety net that force-closes the preview the instant any touch begins
+  // anywhere, regardless of how it got stuck open.
   var avatarPreview = document.getElementById('avatarPreview');
   function positionAvatarPreview(el){
     var rect = el.getBoundingClientRect();
@@ -2047,18 +2051,24 @@ import {
     avatarPreview.style.left = left + 'px';
     avatarPreview.style.top = top + 'px';
   }
-  document.addEventListener('pointerover', function(e){
-    if (e.pointerType !== 'mouse') return;
-    var el = e.target.closest('img.avatar');
-    if (!el) return;
-    avatarPreview.src = el.getAttribute('data-full') || el.src;
-    positionAvatarPreview(el);
-    avatarPreview.classList.add('show');
-  });
-  document.addEventListener('pointerout', function(e){
-    if (e.pointerType !== 'mouse') return;
-    if (e.target.closest('img.avatar')) avatarPreview.classList.remove('show');
-  });
+  var supportsRealHover = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  if (supportsRealHover){
+    document.addEventListener('pointerover', function(e){
+      if (e.pointerType !== 'mouse') return;
+      var el = e.target.closest('img.avatar');
+      if (!el) return;
+      avatarPreview.src = el.getAttribute('data-full') || el.src;
+      positionAvatarPreview(el);
+      avatarPreview.classList.add('show');
+    });
+    document.addEventListener('pointerout', function(e){
+      if (e.pointerType !== 'mouse') return;
+      if (e.target.closest('img.avatar')) avatarPreview.classList.remove('show');
+    });
+  }
+  document.addEventListener('touchstart', function(){
+    avatarPreview.classList.remove('show');
+  }, { passive: true });
 
   // ---------- Init ----------
   // The single source of truth is Firestore, not this device's own memory.
